@@ -9,10 +9,10 @@ export let physicsWorld = null;
 
 export function initPhysicsWorld() {
   physicsWorld = new CANNON.World({
-    gravity: new CANNON.Vec3(0, -15, 0),
+    gravity: new CANNON.Vec3(0, -12, 0),
   });
   physicsWorld.broadphase = new CANNON.SAPBroadphase(physicsWorld);
-  physicsWorld.defaultContactMaterial.friction = 0.4;
+  physicsWorld.defaultContactMaterial.friction = 0.5;
   physicsWorld.defaultContactMaterial.restitution = 0.1;
 
   // Ground plane
@@ -22,15 +22,6 @@ export function initPhysicsWorld() {
   });
   groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
   physicsWorld.addBody(groundBody);
-
-  // Road surface material — higher friction
-  const roadMaterial = new CANNON.Material('road');
-  const tireMaterial = new CANNON.Material('tire');
-  const roadTireContact = new CANNON.ContactMaterial(roadMaterial, tireMaterial, {
-    friction: 0.6,
-    restitution: 0.05,
-  });
-  physicsWorld.addContactMaterial(roadTireContact);
 
   // World boundary walls
   const bound = 800;
@@ -114,23 +105,19 @@ export class CarPhysics {
 
     // Derived stats — tuned for fun arcade feel
     this.maxSpeed = carDef.speed;
-    this.engineForce = carDef.acceleration * 300;
-    this.maxSteer = 0.5 + carDef.handling * 0.015;
-    this.brakeForce = carDef.braking * 20;
+    this.engineForce = carDef.acceleration * 400;
+    this.maxSteer = 0.5 + carDef.handling * 0.02;
+    this.brakeForce = carDef.braking * 25;
 
-    // Cannon body — wider and lower for stability
-    const chassisShape = new CANNON.Box(new CANNON.Vec3(0.95, 0.25, 2.0));
+    // Cannon chassis body
+    const chassisShape = new CANNON.Box(new CANNON.Vec3(0.95, 0.4, 2.0));
     this.chassisBody = new CANNON.Body({
-      mass: 700,
+      mass: 600,
       shape: chassisShape,
-      position: new CANNON.Vec3(0, 2, 0),
-      angularDamping: 0.6,
-      linearDamping: 0.02,
+      position: new CANNON.Vec3(0, 4, 0),
+      angularDamping: 0.3,
+      linearDamping: 0.01,
     });
-
-    // Lower center of mass for stability
-    this.chassisBody.shapeOffsets[0] = new CANNON.Vec3(0, 0.15, 0);
-    this.chassisBody.updateBoundingRadius();
 
     // Collision sounds
     this.chassisBody.addEventListener('collide', (e) => {
@@ -156,46 +143,49 @@ export class CarPhysics {
       indexForwardAxis: 2,
     });
 
-    const baseGrip = 1.5 + carDef.handling * 0.15;
+    const baseGrip = 2.0 + carDef.handling * 0.2;
 
+    // Wheel options — connection points closer to chassis bottom, longer suspension
     const wheelOptions = {
-      radius: 0.33,
+      radius: 0.35,
       directionLocal: new CANNON.Vec3(0, -1, 0),
-      suspensionStiffness: 40,
-      suspensionRestLength: 0.4,
+      suspensionStiffness: 30,
+      suspensionRestLength: 0.5,
       frictionSlip: baseGrip,
-      dampingRelaxation: 2.8,
+      dampingRelaxation: 2.5,
       dampingCompression: 4.0,
       maxSuspensionForce: 100000,
       rollInfluence: 0.05,
       axleLocal: new CANNON.Vec3(-1, 0, 0),
       chassisConnectionPointLocal: new CANNON.Vec3(0, 0, 0),
-      maxSuspensionTravel: 0.4,
+      maxSuspensionTravel: 0.5,
       customSlidingRotationalSpeed: -30,
       useCustomSlidingRotationalSpeed: true,
     };
 
-    // Front wheels — more grip for responsive steering
+    // Front wheels
     this.frontGrip = baseGrip * 1.1;
     wheelOptions.frictionSlip = this.frontGrip;
-    wheelOptions.chassisConnectionPointLocal.set(-0.85, -0.15, 1.4);
+
+    wheelOptions.chassisConnectionPointLocal = new CANNON.Vec3(-0.85, -0.3, 1.4);
     this.vehicle.addWheel({ ...wheelOptions });
-    wheelOptions.chassisConnectionPointLocal.set(0.85, -0.15, 1.4);
+    wheelOptions.chassisConnectionPointLocal = new CANNON.Vec3(0.85, -0.3, 1.4);
     this.vehicle.addWheel({ ...wheelOptions });
 
     // Rear wheels — slightly less grip for oversteer
-    this.rearGrip = baseGrip * 0.9;
+    this.rearGrip = baseGrip * 0.85;
     wheelOptions.frictionSlip = this.rearGrip;
-    wheelOptions.chassisConnectionPointLocal.set(-0.85, -0.15, -1.3);
+
+    wheelOptions.chassisConnectionPointLocal = new CANNON.Vec3(-0.85, -0.3, -1.3);
     this.vehicle.addWheel({ ...wheelOptions });
-    wheelOptions.chassisConnectionPointLocal.set(0.85, -0.15, -1.3);
+    wheelOptions.chassisConnectionPointLocal = new CANNON.Vec3(0.85, -0.3, -1.3);
     this.vehicle.addWheel({ ...wheelOptions });
 
     if (physicsWorld) {
       this.vehicle.addToWorld(physicsWorld);
     }
 
-    // Create wheel bodies for visual sync
+    // Wheel bodies for visual sync
     this.wheelBodies = [];
     this.vehicle.wheelInfos.forEach(() => {
       const wheelBody = new CANNON.Body({ mass: 0 });
@@ -224,7 +214,7 @@ export class CarPhysics {
     const absSpeed = Math.abs(this.speed);
     const speedNorm = Math.min(absSpeed / this.maxSpeed, 1);
 
-    // Gear calculation (for sound/HUD)
+    // Gear calculation
     if (absSpeed < 30) this.gear = 1;
     else if (absSpeed < 60) this.gear = 2;
     else if (absSpeed < 100) this.gear = 3;
@@ -232,28 +222,23 @@ export class CarPhysics {
     else if (absSpeed < 210) this.gear = 5;
     else this.gear = 6;
 
-    // Engine force — more responsive, less drop-off at high speed
-    let force = this.engineForce * this.throttle * (1 - speedNorm * 0.45);
+    // Ground check
+    this.onGround = this.vehicle.wheelInfos.some(w => w.isInContact);
+
+    // Engine force — strong and responsive
+    let force = this.engineForce * this.throttle * (1 - speedNorm * 0.4);
     if (this.nitro) {
       force *= 1.8;
       this.nitroFuel = Math.max(0, this.nitroFuel - dt * 20);
     }
 
-    // Apply engine force to rear wheels (RWD)
-    this.vehicle.applyEngineForce(force, 2);
-    this.vehicle.applyEngineForce(force, 3);
-
-    // Also slight force to front for AWD feel at low speed
-    if (absSpeed < 40) {
-      this.vehicle.applyEngineForce(force * 0.3, 0);
-      this.vehicle.applyEngineForce(force * 0.3, 1);
-    } else {
-      this.vehicle.applyEngineForce(0, 0);
-      this.vehicle.applyEngineForce(0, 1);
+    // Apply to all 4 wheels (AWD) for reliable traction
+    for (let i = 0; i < 4; i++) {
+      this.vehicle.applyEngineForce(force * (i < 2 ? 0.4 : 1.0), i);
     }
 
-    // Steering — responsive at low speed, reduced at high speed
-    const speedSteerFactor = 1 - speedNorm * 0.55;
+    // Steering
+    const speedSteerFactor = 1 - speedNorm * 0.5;
     const steerVal = this.steer * this.maxSteer * speedSteerFactor;
     this.vehicle.setSteeringValue(steerVal, 0);
     this.vehicle.setSteeringValue(steerVal, 1);
@@ -264,7 +249,7 @@ export class CarPhysics {
       this.vehicle.setBrake(brakeVal, i);
     }
 
-    // Handbrake drift — dramatically reduce rear grip
+    // Handbrake drift
     if (this.brake > 0 && absSpeed > 15) {
       this.vehicle.wheelInfos[2].frictionSlip = this.rearGrip * 0.2;
       this.vehicle.wheelInfos[3].frictionSlip = this.rearGrip * 0.2;
@@ -299,14 +284,12 @@ export class CarPhysics {
       this.nitroFuel = Math.min(100, this.nitroFuel + dt * 8);
     }
 
-    // Anti-flip: strong corrective force when tilting
+    // Anti-flip
     const up = new CANNON.Vec3();
     this.chassisBody.vectorToWorldFrame(new CANNON.Vec3(0, 1, 0), up);
     if (up.y < 0.5) {
-      // Aggressively dampen roll/pitch
       this.chassisBody.angularVelocity.x *= 0.85;
       this.chassisBody.angularVelocity.z *= 0.85;
-      // Push car upright
       this.chassisBody.applyTorque(new CANNON.Vec3(
         -this.chassisBody.angularVelocity.x * 800,
         0,
@@ -314,24 +297,21 @@ export class CarPhysics {
       ));
     }
 
-    // If fully flipped, auto-reset
-    if (up.y < -0.5) {
+    // Auto-reset if fully flipped
+    if (up.y < -0.3) {
       const pos = this.chassisBody.position;
       this.reset(pos.x, pos.z, this.rotation);
     }
 
-    // Keep car from going underground
-    if (this.chassisBody.position.y < 0.3) {
-      this.chassisBody.position.y = 0.3;
+    // Keep car above ground
+    if (this.chassisBody.position.y < 0.4) {
+      this.chassisBody.position.y = 0.4;
       if (this.chassisBody.velocity.y < 0) {
         this.chassisBody.velocity.y = 0;
       }
     }
 
-    // Ground check
-    this.onGround = this.vehicle.wheelInfos.some(w => w.isInContact);
-
-    // Idle drag - slight deceleration when not pressing anything
+    // Idle drag
     if (this.throttle === 0 && this.brake === 0 && this.onGround) {
       vel.x *= (1 - dt * 0.8);
       vel.z *= (1 - dt * 0.8);
@@ -371,11 +351,11 @@ export class CarPhysics {
   }
 
   reset(x = 0, z = 0, angle = 0) {
-    this.chassisBody.position.set(x, 2, z);
+    this.chassisBody.position.set(x, 4, z);
     this.chassisBody.velocity.set(0, 0, 0);
     this.chassisBody.angularVelocity.set(0, 0, 0);
     this.chassisBody.quaternion.setFromEuler(0, angle, 0);
-    this.position.set(x, 2, z);
+    this.position.set(x, 4, z);
     this.rotation = angle;
     this.velocity.set(0, 0, 0);
     this.speed = 0;
@@ -386,7 +366,6 @@ export class CarPhysics {
     mesh.position.copy(this.position);
     mesh.quaternion.copy(this.quaternion);
 
-    // Wheel visuals
     if (mesh.userData.wheels) {
       mesh.userData.wheels.forEach((wheelMesh, i) => {
         if (this.wheelBodies[i]) {
