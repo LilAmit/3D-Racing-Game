@@ -543,6 +543,14 @@ function updateHUD(carState) {
   const gearEl = document.getElementById('gearValue');
   if (gearEl) gearEl.textContent = carState.gear;
 
+  // RPM bar
+  const rpmFill = document.getElementById('rpmFill');
+  if (rpmFill) {
+    const rpm = carState.rpm || 0;
+    rpmFill.style.width = (rpm * 100) + '%';
+    rpmFill.style.backgroundColor = rpm > 0.85 ? '#ff4444' : rpm > 0.6 ? '#ffaa00' : '#00ff88';
+  }
+
   // Nitro bar
   const nitroFill = document.getElementById('nitroFill');
   if (nitroFill) {
