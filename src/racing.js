@@ -19,7 +19,8 @@ class BotCar {
     this.finishTime = 0;
   }
 
-  update(dt, colliders) {
+  // Compute AI inputs and apply forces (call BEFORE stepPhysics)
+  applyForces(dt, colliders) {
     if (this.finished) return;
 
     const target = this.track.checkpoints[this.currentCheckpoint];
@@ -28,12 +29,10 @@ class BotCar {
     const dist = Math.sqrt(dx * dx + dz * dz);
     const targetAngle = Math.atan2(dx, dz);
 
-    // Normalize angle difference
     let angleDiff = targetAngle - this.physics.rotation;
     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
-    // Bot AI inputs
     const inputs = {
       forward: true,
       backward: false,
@@ -43,8 +42,20 @@ class BotCar {
       nitro: dist > 50 && Math.abs(angleDiff) < 0.3,
     };
 
-    this.physics.update(dt, inputs, colliders);
+    this.physics.applyInputs(dt, inputs);
+  }
+
+  // Read state after physics step (call AFTER stepPhysics)
+  readStateAfterStep(dt) {
+    if (this.finished) return;
+    this.physics.readState(dt);
     this.physics.applyToMesh(this.mesh);
+  }
+
+  // Legacy update method — for non-race contexts
+  update(dt, colliders) {
+    this.applyForces(dt, colliders);
+    // Note: stepPhysics must be called externally between applyForces and readStateAfterStep
   }
 
   checkCheckpoint(totalLaps) {
@@ -174,9 +185,8 @@ export class RaceManager {
 
     this.elapsedTime = (performance.now() - this.startTime) / 1000;
 
-    // Update bots
+    // Check bot checkpoints (forces/state handled in main loop)
     this.bots.forEach((bot, i) => {
-      bot.update(dt, colliders);
       const finished = bot.checkCheckpoint(this.totalLaps);
       if (finished) {
         bot.finishTime = this.elapsedTime;

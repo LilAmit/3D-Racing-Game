@@ -257,16 +257,16 @@ function startPlaying() {
   spawnPlayerCar();
   playerPhysics.reset(SPAWN_POS.x, SPAWN_POS.z, SPAWN_ANGLE);
 
-  // Snap camera to behind the car immediately
+  // Snap camera behind car immediately
   const pos = playerPhysics.position;
   const rot = playerPhysics.rotation;
   camera.position.set(
-    pos.x - Math.sin(rot) * 14,
-    pos.y + 6,
-    pos.z - Math.cos(rot) * 14
+    pos.x - Math.sin(rot) * 12,
+    pos.y + 5,
+    pos.z - Math.cos(rot) * 12
   );
   cameraOffset.copy(camera.position);
-  cameraLookAt.set(pos.x, pos.y + 1, pos.z);
+  cameraLookAt.set(pos.x, pos.y + 0.5, pos.z);
   camera.lookAt(cameraLookAt);
 
   audio.init();
@@ -571,13 +571,8 @@ function animate() {
 
   const dt = Math.min(clock.getDelta(), 0.05);
 
-  // Step physics
-  if (state === 'playing' || state === 'countdown') {
-    stepPhysics(dt);
-  }
-
   if (state === 'playing') {
-    // Player input
+    // 1. Read inputs
     const inputs = {
       forward: controls.isPressed('forward'),
       backward: controls.isPressed('backward'),
@@ -587,9 +582,33 @@ function animate() {
       nitro: controls.isPressed('nitro'),
     };
 
-    // Update physics
-    const carState = playerPhysics.update(dt, inputs, colliders);
+    // 2. Apply forces BEFORE physics step (critical ordering!)
+    playerPhysics.applyInputs(dt, inputs);
+
+    // 3. Also update bot forces before step
+    if (raceManager.active) {
+      raceManager.bots.forEach(bot => {
+        if (!bot.finished) {
+          bot.applyForces(dt, colliders);
+        }
+      });
+    }
+
+    // 4. Step physics with all forces applied
+    stepPhysics(dt);
+
+    // 5. Read state after step
+    const carState = playerPhysics.readState(dt);
     playerPhysics.applyToMesh(playerMesh);
+
+    // 6. Update bot state after step
+    if (raceManager.active) {
+      raceManager.bots.forEach(bot => {
+        if (!bot.finished) {
+          bot.readStateAfterStep(dt);
+        }
+      });
+    }
 
     // HUD
     updateHUD(carState);
@@ -624,7 +643,9 @@ function animate() {
     // Minimap
     updateMinimap();
   } else if (state === 'countdown') {
-    // Still apply mesh during countdown so car is visible
+    // Step physics during countdown too
+    stepPhysics(dt);
+    playerPhysics.readState(dt);
     playerPhysics.applyToMesh(playerMesh);
     updateCamera(dt);
   }
