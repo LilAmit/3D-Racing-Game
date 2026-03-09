@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Racing Game</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Main Menu -->
+  <div id="mainMenu" class="overlay">
+    <div class="menu-container">
+      <h1 class="game-title">VELOCITY</h1>
+      <p class="game-subtitle">3D Open World Racing</p>
+      <div class="menu-buttons">
+        <button class="menu-btn primary" id="btnFreeRoam">Free Roam</button>
+        <button class="menu-btn" id="btnRace">Race</button>
+        <button class="menu-btn" id="btnGarage">Garage</button>
+        <button class="menu-btn" id="btnMultiplayer">Multiplayer</button>
+        <button class="menu-btn" id="btnSettings">Settings</button>
+      </div>
+      <div class="coin-display-menu">
+        <span class="coin-icon">🪙</span>
+        <span id="menuCoins">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="speedometer">
+      <div id="speedValue">0</div>
+      <div id="speedUnit">KM/H</div>
+      <div id="gearDisplay">
+        <span id="gearValue">1</span>
+      </div>
+    </div>
+    <div id="nitroBar">
+      <div id="nitroFill"></div>
+      <div id="nitroLabel">NITRO</div>
+    </div>
+    <div id="driftIndicator">DRIFT!</div>
+    <div id="coinHud">
+      <span class="coin-icon">🪙</span>
+      <span id="hudCoins">0</span>
+    </div>
+    <div id="minimap">
+      <canvas id="minimapCanvas" width="160" height="160"></canvas>
+    </div>
+    <div id="raceHud" class="hidden">
+      <div id="racePosition">1st</div>
+      <div id="raceLap">Lap 1/3</div>
+      <div id="raceTime">0:00</div>
+    </div>
+    <div id="controlsHint">
+      <div>W/S - Drive | A/D - Steer</div>
+      <div>SPACE - Brake/Drift | SHIFT - Nitro</div>
+      <div>C - Camera | R - Reset | ESC - Pause</div>
+    </div>
+  </div>
+
+  <!-- Race Setup -->
+  <div id="raceSetup" class="overlay hidden">
+    <div class="panel">
+      <h2>Race Setup</h2>
+      <div class="form-group">
+        <label>Track</label>
+        <select id="trackSelect">
+          <option value="circuit">City Circuit</option>
+          <option value="highway">Highway Sprint</option>
+          <option value="mountain">Mountain Pass</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Laps</label>
+        <select id="lapSelect">
+          <option value="1">1 Lap</option>
+          <option value="3" selected>3 Laps</option>
+          <option value="5">5 Laps</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Bots</label>
+        <select id="botSelect">
+          <option value="0">None</option>
+          <option value="3" selected>3 Bots</option>
+          <option value="5">5 Bots</option>
+          <option value="7">7 Bots</option>
+        </select>
+      </div>
+      <div class="btn-row">
+        <button class="menu-btn" id="btnBackFromRace">Back</button>
+        <button class="menu-btn primary" id="btnStartRace">Start Race</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Garage / Shop -->
+  <div id="garage" class="overlay hidden">
+    <div class="panel wide">
+      <h2>Garage</h2>
+      <div id="carGrid" class="car-grid"></div>
+      <div class="btn-row">
+        <button class="menu-btn" id="btnBackFromGarage">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multiplayer -->
+  <div id="multiplayerMenu" class="overlay hidden">
+    <div class="panel">
+      <h2>Multiplayer</h2>
+      <div class="form-group">
+        <label>Your Tag</label>
+        <input type="text" id="myTag" readonly />
+      </div>
+      <div class="form-group">
+        <label>Friend's Tag</label>
+        <input type="text" id="friendTag" placeholder="#abc123" />
+      </div>
+      <button class="menu-btn primary" id="btnConnect">Connect</button>
+      <div id="connectedPlayers"></div>
+      <div class="btn-row">
+        <button class="menu-btn" id="btnBackFromMP">Back</button>
+        <button class="menu-btn primary" id="btnStartMP">Start Together</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settingsMenu" class="overlay hidden">
+    <div class="panel wide">
+      <h2>Settings</h2>
+      <div class="settings-grid">
+        <div class="settings-section">
+          <h3>Display</h3>
+          <div class="form-group">
+            <label>Brightness</label>
+            <input type="range" id="setBrightness" min="0.3" max="1.5" step="0.1" value="1" />
+            <span id="brightnessVal">100%</span>
+          </div>
+          <div class="form-group">
+            <label>FOV</label>
+            <input type="range" id="setFOV" min="50" max="120" step="5" value="75" />
+            <span id="fovVal">75</span>
+          </div>
+          <div class="form-group">
+            <label>Shadows</label>
+            <input type="checkbox" id="setShadows" checked />
+          </div>
+          <div class="form-group">
+            <label>Draw Distance</label>
+            <input type="range" id="setDrawDist" min="200" max="1000" step="50" value="500" />
+            <span id="drawDistVal">500</span>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h3>Controls</h3>
+          <div class="form-group">
+            <label>Mouse Sensitivity</label>
+            <input type="range" id="setMouseSens" min="0.1" max="3" step="0.1" value="1" />
+            <span id="mouseSensVal">1.0</span>
+          </div>
+          <div class="form-group">
+            <label>Invert Y-Axis</label>
+            <input type="checkbox" id="setInvertY" />
+          </div>
+          <div id="keybindList" class="keybind-list"></div>
+        </div>
+        <div class="settings-section">
+          <h3>Audio</h3>
+          <div class="form-group">
+            <label>Master Volume</label>
+            <input type="range" id="setMasterVol" min="0" max="1" step="0.05" value="0.7" />
+            <span id="masterVolVal">70%</span>
+          </div>
+          <div class="form-group">
+            <label>Music Volume</label>
+            <input type="range" id="setMusicVol" min="0" max="1" step="0.05" value="0.5" />
+            <span id="musicVolVal">50%</span>
+          </div>
+          <div class="form-group">
+            <label>SFX Volume</label>
+            <input type="range" id="setSFXVol" min="0" max="1" step="0.05" value="0.8" />
+            <span id="sfxVolVal">80%</span>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="menu-btn" id="btnResetSettings">Reset Defaults</button>
+        <button class="menu-btn primary" id="btnBackFromSettings">Save & Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause Menu -->
+  <div id="pauseMenu" class="overlay hidden">
+    <div class="panel">
+      <h2>Paused</h2>
+      <button class="menu-btn primary" id="btnResume">Resume</button>
+      <button class="menu-btn" id="btnPauseSettings">Settings</button>
+      <button class="menu-btn danger" id="btnQuitToMenu">Quit to Menu</button>
+    </div>
+  </div>
+
+  <!-- Race Countdown -->
+  <div id="countdown" class="overlay hidden">
+    <div id="countdownText" class="countdown-text">3</div>
+  </div>
+
+  <!-- Race Results -->
+  <div id="raceResults" class="overlay hidden">
+    <div class="panel">
+      <h2 id="resultTitle">Race Complete!</h2>
+      <div id="resultDetails"></div>
+      <div id="resultReward"></div>
+      <div class="btn-row">
+        <button class="menu-btn primary" id="btnResultsOk">Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
