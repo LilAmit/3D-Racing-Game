@@ -1,17 +1,14 @@
 // Race mode — bots, checkpoints, laps, results
 
-import * as THREE from 'three';
-import { TRACKS, addCheckpoints } from './world.js';
-import { CarPhysics } from './physics.js';
-import { buildCarMesh, CAR_DEFS, garage } from './cars.js';
+import { TRACKS } from './world.js';
+import { Car } from './car.js';
+import { CAR_DEFS } from './garage.js';
 import { audio } from './audio.js';
 
 class BotCar {
   constructor(scene, def, startX, startZ, startAngle, trackId) {
-    this.physics = new CarPhysics(def);
-    this.physics.reset(startX, startZ, startAngle);
-    this.mesh = buildCarMesh(def);
-    scene.add(this.mesh);
+    this.car = new Car(def, scene);
+    this.car.reset(startX, startZ, startAngle);
     this.track = TRACKS[trackId];
     this.currentCheckpoint = 0;
     this.lap = 0;
@@ -19,17 +16,16 @@ class BotCar {
     this.finishTime = 0;
   }
 
-  // Compute AI inputs and apply forces (call BEFORE stepPhysics)
-  applyForces(dt, colliders) {
+  update(dt, colliders, ramps) {
     if (this.finished) return;
 
     const target = this.track.checkpoints[this.currentCheckpoint];
-    const dx = target.x - this.physics.position.x;
-    const dz = target.z - this.physics.position.z;
+    const dx = target.x - this.car.position.x;
+    const dz = target.z - this.car.position.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
     const targetAngle = Math.atan2(dx, dz);
 
-    let angleDiff = targetAngle - this.physics.rotation;
+    let angleDiff = targetAngle - this.car.rotation;
     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
@@ -38,31 +34,18 @@ class BotCar {
       backward: false,
       left: angleDiff > 0.1,
       right: angleDiff < -0.1,
-      brake: Math.abs(angleDiff) > 1.2 && Math.abs(this.physics.speed) > 40,
+      brake: Math.abs(angleDiff) > 1.2 && this.car.speed > 40,
       nitro: dist > 50 && Math.abs(angleDiff) < 0.3,
     };
 
-    this.physics.applyInputs(dt, inputs);
-  }
-
-  // Read state after physics step (call AFTER stepPhysics)
-  readStateAfterStep(dt) {
-    if (this.finished) return;
-    this.physics.readState(dt);
-    this.physics.applyToMesh(this.mesh);
-  }
-
-  // Legacy update method — for non-race contexts
-  update(dt, colliders) {
-    this.applyForces(dt, colliders);
-    // Note: stepPhysics must be called externally between applyForces and readStateAfterStep
+    this.car.update(dt, inputs, colliders, ramps);
   }
 
   checkCheckpoint(totalLaps) {
     if (this.finished) return false;
     const cp = this.track.checkpoints[this.currentCheckpoint];
-    const dx = this.physics.position.x - cp.x;
-    const dz = this.physics.position.z - cp.z;
+    const dx = this.car.position.x - cp.x;
+    const dz = this.car.position.z - cp.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
 
     if (dist < cp.radius) {
@@ -79,9 +62,8 @@ class BotCar {
     return false;
   }
 
-  destroy(scene) {
-    scene.remove(this.mesh);
-    this.physics.destroy();
+  destroy() {
+    this.car.destroy();
   }
 }
 
@@ -98,8 +80,6 @@ export class RaceManager {
     this.elapsedTime = 0;
     this.playerFinished = false;
     this.finishOrder = [];
-    this.countingDown = false;
-    this.countdownValue = 0;
   }
 
   setup(trackId, laps, botCount) {
@@ -108,37 +88,31 @@ export class RaceManager {
     this.botCount = botCount;
   }
 
-  async startCountdown(scene, playerPhysics, worldObjects, colliders, onReady) {
+  async startCountdown(scene, world, playerCar, onReady) {
     const track = TRACKS[this.trackId];
-    addCheckpoints(scene, track, worldObjects);
+    world.addCheckpoints(track);
 
     // Position player at start
-    playerPhysics.reset(track.startPos.x, track.startPos.z, track.startAngle);
+    playerCar.reset(track.startPos.x, track.startPos.z, track.startAngle);
 
     // Create bots
-    this.bots.forEach(b => b.destroy(scene));
+    this.bots.forEach(b => b.destroy());
     this.bots = [];
 
-    const botDefs = [];
     for (let i = 0; i < this.botCount; i++) {
-      botDefs.push(CAR_DEFS[Math.floor(Math.random() * Math.min(CAR_DEFS.length, 4))]);
-    }
-
-    botDefs.forEach((def, i) => {
+      const def = CAR_DEFS[Math.floor(Math.random() * Math.min(CAR_DEFS.length, 4))];
       const offset = (i + 1) * 6;
       const side = i % 2 === 0 ? -5 : 5;
-      const bot = new BotCar(
+      this.bots.push(new BotCar(
         scene, def,
         track.startPos.x + side,
         track.startPos.z - offset,
         track.startAngle,
         this.trackId
-      );
-      this.bots.push(bot);
-    });
+      ));
+    }
 
     // Countdown
-    this.countingDown = true;
     const countdownEl = document.getElementById('countdown');
     const countdownText = document.getElementById('countdownText');
     countdownEl.classList.remove('hidden');
@@ -146,10 +120,10 @@ export class RaceManager {
     for (let i = 3; i >= 1; i--) {
       countdownText.textContent = i;
       countdownText.style.animation = 'none';
-      countdownText.offsetHeight; // Reflow
+      countdownText.offsetHeight;
       countdownText.style.animation = 'countPulse 1s ease-out';
       audio.playCountdown(false);
-      await this.delay(1000);
+      await this._delay(1000);
     }
 
     countdownText.textContent = 'GO!';
@@ -158,14 +132,13 @@ export class RaceManager {
     countdownText.offsetHeight;
     countdownText.style.animation = 'countPulse 1s ease-out';
     audio.playCountdown(true);
-    await this.delay(800);
+    await this._delay(800);
 
     countdownEl.classList.add('hidden');
     countdownText.style.color = '';
 
     // Start race
     this.active = true;
-    this.countingDown = false;
     this.playerCheckpoint = 0;
     this.playerLap = 0;
     this.playerFinished = false;
@@ -176,21 +149,22 @@ export class RaceManager {
     if (onReady) onReady();
   }
 
-  delay(ms) {
+  _delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  update(dt, playerPhysics, colliders) {
+  update(dt, playerCar, colliders, ramps) {
     if (!this.active) return null;
 
     this.elapsedTime = (performance.now() - this.startTime) / 1000;
 
-    // Check bot checkpoints (forces/state handled in main loop)
-    this.bots.forEach((bot, i) => {
+    // Update bots
+    this.bots.forEach(bot => {
+      bot.update(dt, colliders, ramps);
       const finished = bot.checkCheckpoint(this.totalLaps);
       if (finished) {
         bot.finishTime = this.elapsedTime;
-        this.finishOrder.push({ name: bot.physics.def.name + ' Bot', time: this.elapsedTime });
+        this.finishOrder.push({ name: bot.car.def.name + ' Bot', time: this.elapsedTime });
       }
     });
 
@@ -198,8 +172,8 @@ export class RaceManager {
     if (!this.playerFinished) {
       const track = TRACKS[this.trackId];
       const cp = track.checkpoints[this.playerCheckpoint];
-      const dx = playerPhysics.position.x - cp.x;
-      const dz = playerPhysics.position.z - cp.z;
+      const dx = playerCar.position.x - cp.x;
+      const dz = playerCar.position.z - cp.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
 
       if (dist < cp.radius) {
@@ -212,33 +186,28 @@ export class RaceManager {
             this.playerFinished = true;
             this.finishOrder.push({ name: 'You', time: this.elapsedTime, isPlayer: true });
             audio.playFinish();
-            return this.getResults();
+            return this._getResults();
           }
         }
       }
     }
 
-    // Check if all finished
+    // Check if all bots finished
     const allBotsFinished = this.bots.every(b => b.finished);
-    if (this.playerFinished || (allBotsFinished && !this.playerFinished)) {
-      if (allBotsFinished && !this.playerFinished) {
-        // Player DNF — still finish them
-        this.playerFinished = true;
-        this.finishOrder.push({ name: 'You', time: this.elapsedTime, isPlayer: true });
-        return this.getResults();
-      }
+    if (allBotsFinished && !this.playerFinished) {
+      this.playerFinished = true;
+      this.finishOrder.push({ name: 'You', time: this.elapsedTime, isPlayer: true });
+      return this._getResults();
     }
 
-    // Update HUD
-    this.updateHUD();
+    this._updateHUD();
     return null;
   }
 
-  updateHUD() {
+  _updateHUD() {
     const raceHud = document.getElementById('raceHud');
     raceHud.classList.remove('hidden');
 
-    // Position
     let pos = 1;
     this.bots.forEach(bot => {
       const botProgress = bot.lap * 100 + (bot.currentCheckpoint / TRACKS[this.trackId].checkpoints.length) * 100;
@@ -254,29 +223,26 @@ export class RaceManager {
     document.getElementById('raceTime').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  getResults() {
-    // Sort by time
+  _getResults() {
     this.finishOrder.sort((a, b) => a.time - b.time);
     const playerIdx = this.finishOrder.findIndex(f => f.isPlayer);
     const position = playerIdx + 1;
-
-    // Coins reward
     const rewards = { 1: 200, 2: 100, 3: 50 };
-    const coins = rewards[position] || 20;
 
     return {
       position,
       totalRacers: this.botCount + 1,
       time: this.elapsedTime,
-      coins,
+      coins: rewards[position] || 20,
       order: this.finishOrder,
     };
   }
 
-  end(scene) {
+  end(world) {
     this.active = false;
-    this.bots.forEach(b => b.destroy(scene));
+    this.bots.forEach(b => b.destroy());
     this.bots = [];
+    world.removeCheckpoints();
     document.getElementById('raceHud').classList.add('hidden');
   }
 }

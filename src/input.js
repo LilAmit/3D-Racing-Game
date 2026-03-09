@@ -1,28 +1,38 @@
-// Input handler — keyboard + mouse
+// InputHandler — keyboard + mouse with sticky-key prevention
 
 import { settings } from './settings.js';
 
-class Controls {
+export class InputHandler {
   constructor() {
     this.keys = {};
-    this.mouseX = 0;
-    this.mouseY = 0;
     this.mouseDX = 0;
     this.mouseDY = 0;
     this.locked = false;
 
-    window.addEventListener('keydown', (e) => { this.keys[e.code] = true; });
-    window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
-    window.addEventListener('mousemove', (e) => {
+    // Bind handlers so we can remove them if needed
+    this._onKeyDown = (e) => { this.keys[e.code] = true; };
+    this._onKeyUp = (e) => { this.keys[e.code] = false; };
+    this._onBlur = () => { this.keys = {}; }; // Prevent sticky keys on focus loss
+    this._onMouseMove = (e) => {
       if (this.locked) {
         this.mouseDX += e.movementX;
         this.mouseDY += e.movementY;
       }
-    });
-
-    document.addEventListener('pointerlockchange', () => {
+    };
+    this._onPointerLockChange = () => {
+      const wasLocked = this.locked;
       this.locked = document.pointerLockElement !== null;
-    });
+      // Clear keys when pointer lock is lost to prevent sticky keys
+      if (wasLocked && !this.locked) {
+        this.keys = {};
+      }
+    };
+
+    window.addEventListener('keydown', this._onKeyDown);
+    window.addEventListener('keyup', this._onKeyUp);
+    window.addEventListener('blur', this._onBlur);
+    window.addEventListener('mousemove', this._onMouseMove);
+    document.addEventListener('pointerlockchange', this._onPointerLockChange);
   }
 
   isPressed(action) {
@@ -58,5 +68,3 @@ class Controls {
     this.mouseDY = 0;
   }
 }
-
-export const controls = new Controls();

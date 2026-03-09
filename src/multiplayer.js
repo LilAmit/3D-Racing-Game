@@ -1,7 +1,7 @@
 // Multiplayer via WebSocket — syncs car positions with friends using friend tags
 
 import * as THREE from 'three';
-import { buildCarMesh, CAR_DEFS } from './cars.js';
+import { buildCarMesh, CAR_DEFS } from './garage.js';
 
 class MultiplayerManager {
   constructor() {
