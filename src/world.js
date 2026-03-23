@@ -207,12 +207,20 @@ export class World {
     this.sun = null;
     this.colliders = [];
 
+    // Track all free-roam meshes so we can hide/show them
+    this._freeroamMeshes = [];
+    this._freeroamVisible = true;
+
     this._build();
     this._buildColliders();
   }
 
   _build() {
     const scene = this.scene;
+    // Intercept scene.add to track all free-roam objects
+    const origAdd = scene.add.bind(scene);
+    const trackAdd = (obj) => { this._freeroamMeshes.push(obj); return origAdd(obj); };
+    const sceneAdd = trackAdd;
 
     // ── Ground — FLAT plane, below road level so grass never covers roads ──
     const groundGeo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 1, 1);
@@ -222,7 +230,7 @@ export class World {
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.1; // Grass sits BELOW road surface (y=0.05)
     ground.receiveShadow = true;
-    scene.add(ground);
+    sceneAdd(ground);
 
     // ── Roads ──
     const roadMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.75 });
@@ -242,7 +250,7 @@ export class World {
         roadMesh.rotation.z = -angle;
         roadMesh.position.set((x1 + x2) / 2, 0.05, (z1 + z2) / 2);
         roadMesh.receiveShadow = true;
-        scene.add(roadMesh);
+        sceneAdd(roadMesh);
 
         const dashCount = Math.floor(len / 8);
         for (let d = 0; d < dashCount; d++) {
@@ -251,7 +259,7 @@ export class World {
           line.rotation.x = -Math.PI / 2;
           line.rotation.z = -angle;
           line.position.set(x1 + dx * t, 0.06, z1 + dz * t);
-          scene.add(line);
+          sceneAdd(line);
         }
 
         [-1, 1].forEach(side => {
@@ -260,14 +268,13 @@ export class World {
           const perpZ = -Math.cos(angle + Math.PI / 2) * (road.width / 2);
           curb.position.set((x1 + x2) / 2 + perpX * side, 0.08, (z1 + z2) / 2 + perpZ * side);
           curb.rotation.y = angle;
-          scene.add(curb);
+          sceneAdd(curb);
         });
       }
     });
 
     // ── Road intersections — fill in corners so no grass peeks through ──
     const intersectionMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.75 });
-    // Cover major intersection areas
     const intersections = [
       { x: 0, z: 0, size: 20 },
       { x: 200, z: -200, size: 18 }, { x: -200, z: -200, size: 18 },
@@ -283,7 +290,7 @@ export class World {
       const patch = new THREE.Mesh(new THREE.PlaneGeometry(size, size), intersectionMat);
       patch.rotation.x = -Math.PI / 2;
       patch.position.set(x, 0.051, z);
-      scene.add(patch);
+      sceneAdd(patch);
     });
 
     // ── Buildings ──
@@ -314,7 +321,7 @@ export class World {
         building.position.set(cx, h / 2, cz);
         building.castShadow = true;
         building.receiveShadow = true;
-        scene.add(building);
+        sceneAdd(building);
         this.buildings.push({ mesh: building, x: cx, z: cz, w, d, h });
         buildingPositions.push({ x: cx, z: cz, w, d });
 
@@ -326,12 +333,12 @@ export class World {
             if (Math.random() > 0.55) continue;
             const winMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.5), windowMat);
             winMesh.position.set(cx - w / 2 + (wc + 0.5) * (w / windowCols), 2 + wr * 4, cz + d / 2 + 0.01);
-            scene.add(winMesh);
+            sceneAdd(winMesh);
             if (Math.random() > 0.5) {
               const winSide = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.5), windowMat);
               winSide.position.set(cx + w / 2 + 0.01, 2 + wr * 4, cz - d / 2 + (wc + 0.5) * (d / windowCols));
               winSide.rotation.y = Math.PI / 2;
-              scene.add(winSide);
+              sceneAdd(winSide);
             }
           }
         }
@@ -370,7 +377,7 @@ export class World {
       leaves.castShadow = true;
       treeGroup.add(leaves);
       treeGroup.position.set(tx, -0.1, tz); // Trees sit on the grass level
-      scene.add(treeGroup);
+      sceneAdd(treeGroup);
       this.trees.push({ mesh: treeGroup, x: tx, z: tz, radius: leafSize });
     }
 
@@ -416,14 +423,14 @@ export class World {
       rampMesh.rotation.y = rp.rotY;
       rampMesh.castShadow = true;
       rampMesh.receiveShadow = true;
-      scene.add(rampMesh);
+      sceneAdd(rampMesh);
 
       const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xffaa00, emissiveIntensity: 0.2 });
       [-1, 1].forEach(side => {
         const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.3, rampH * 0.6, rampD * 0.8), stripeMat);
         stripe.position.set(rp.x + Math.cos(rp.rotY) * side * hw, rampH * 0.35, rp.z + Math.sin(rp.rotY) * side * hw);
         stripe.rotation.y = rp.rotY;
-        scene.add(stripe);
+        sceneAdd(stripe);
       });
 
       this.ramps.push({ x: rp.x, z: rp.z, w: rampW, d: rampD, h: rampH, rotY: rp.rotY });
@@ -438,10 +445,10 @@ export class World {
         if (Math.abs(pos.x) > 1400 || Math.abs(pos.z) > 1400) return;
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 7, 4), poleMat);
         pole.position.set(pos.x, 3.5, pos.z);
-        scene.add(pole);
+        sceneAdd(pole);
         const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.25, 6, 6), lightBulbMat);
         lamp.position.set(pos.x, 7, pos.z);
-        scene.add(lamp);
+        sceneAdd(lamp);
       });
     }
 
@@ -463,12 +470,15 @@ export class World {
       const coin = buildCoinMesh();
       coin.position.set(cx, 1.5, cz);
       coin.userData.collected = false;
-      scene.add(coin);
+      sceneAdd(coin);
       this.coins.push(coin);
     }
 
-    // ── Lighting ──
-    scene.add(new THREE.AmbientLight(0x7799bb, 0.7));
+    // ── Lighting (stored for free-roam tracking) ──
+    this._freeroamLights = [];
+    const ambient = new THREE.AmbientLight(0x7799bb, 0.7);
+    sceneAdd(ambient);
+    this._freeroamLights.push(ambient);
 
     this.sun = new THREE.DirectionalLight(0xffeedd, 1.4);
     this.sun.position.set(100, 150, 80);
@@ -481,11 +491,18 @@ export class World {
     this.sun.shadow.camera.bottom = -250;
     this.sun.shadow.camera.far = 600;
     this.sun.shadow.bias = -0.001;
-    scene.add(this.sun);
+    sceneAdd(this.sun);
+    this._freeroamLights.push(this.sun);
 
-    scene.add(new THREE.HemisphereLight(0x88bbff, 0x445522, 0.5));
-    scene.fog = new THREE.Fog(0x88bbdd, 500, 1500);
-    scene.background = new THREE.Color(0x88bbdd);
+    const hemi = new THREE.HemisphereLight(0x88bbff, 0x445522, 0.5);
+    sceneAdd(hemi);
+    this._freeroamLights.push(hemi);
+
+    // Store free-roam sky settings
+    this._freeroamFog = new THREE.Fog(0x88bbdd, 500, 1500);
+    this._freeroamBg = new THREE.Color(0x88bbdd);
+    scene.fog = this._freeroamFog;
+    scene.background = this._freeroamBg;
   }
 
   _buildColliders() {
@@ -498,23 +515,82 @@ export class World {
     });
   }
 
+  hideFreeroam() {
+    if (!this._freeroamVisible) return;
+    this._freeroamVisible = false;
+    this._freeroamMeshes.forEach(m => { m.visible = false; });
+  }
+
+  showFreeroam() {
+    if (this._freeroamVisible) return;
+    this._freeroamVisible = true;
+    this._freeroamMeshes.forEach(m => { m.visible = true; });
+    // Restore free-roam sky/fog
+    this.scene.fog = this._freeroamFog;
+    this.scene.background = this._freeroamBg;
+  }
+
   updateSunPosition(playerPos) {
-    if (this.sun) {
-      this.sun.position.set(playerPos.x + 100, 150, playerPos.z + 80);
-      this.sun.target.position.copy(playerPos);
-      this.sun.target.updateMatrixWorld();
+    const activeSun = this._raceSun || this.sun;
+    if (activeSun) {
+      activeSun.position.set(playerPos.x + 100, 150, playerPos.z + 80);
+      activeSun.target.position.copy(playerPos);
+      activeSun.target.updateMatrixWorld();
     }
   }
 
-  // Build dedicated race track geometry
+  // Build dedicated race track — a completely separate world (no free roam visible)
   buildRaceTrack(trackId) {
     this.removeRaceTrack();
     const track = TRACKS[trackId];
     if (!track || !track.dedicated) return;
 
+    // Hide all free-roam geometry
+    this.hideFreeroam();
+
+    const scene = this.scene;
+    const add = (obj) => { this.raceTrackMeshes.push(obj); scene.add(obj); return obj; };
+
+    // ── Race world ground — flat dark tarmac/grass ──
+    const raceGround = new THREE.Mesh(
+      new THREE.PlaneGeometry(2000, 2000, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0x2a5a2a, roughness: 0.9 })
+    );
+    raceGround.rotation.x = -Math.PI / 2;
+    raceGround.position.y = -0.1;
+    raceGround.receiveShadow = true;
+    add(raceGround);
+
+    // ── Race lighting ──
+    const raceAmbient = new THREE.AmbientLight(0x99aabb, 0.8);
+    add(raceAmbient);
+
+    this._raceSun = new THREE.DirectionalLight(0xffeedd, 1.6);
+    this._raceSun.position.set(80, 120, 60);
+    this._raceSun.castShadow = true;
+    this._raceSun.shadow.mapSize.width = 2048;
+    this._raceSun.shadow.mapSize.height = 2048;
+    this._raceSun.shadow.camera.left = -400;
+    this._raceSun.shadow.camera.right = 400;
+    this._raceSun.shadow.camera.top = 400;
+    this._raceSun.shadow.camera.bottom = -400;
+    this._raceSun.shadow.camera.far = 800;
+    this._raceSun.shadow.bias = -0.001;
+    add(this._raceSun);
+
+    const raceHemi = new THREE.HemisphereLight(0x88aacc, 0x445522, 0.5);
+    add(raceHemi);
+
+    // Race sky / fog
+    scene.fog = new THREE.Fog(0x667799, 400, 1200);
+    scene.background = new THREE.Color(0x667799);
+
+    // ── Track geometry ──
     const roadMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
     const barrierMat = new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff0000, emissiveIntensity: 0.2 });
     const whiteBarrierMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
+    const curbRedMat = new THREE.MeshStandardMaterial({ color: 0xcc2222 });
+    const curbWhiteMat = new THREE.MeshStandardMaterial({ color: 0xdddddd });
     const cps = track.checkpoints;
     const trackWidth = 24;
 
@@ -532,74 +608,175 @@ export class World {
       road.rotation.z = -angle;
       road.position.set((a.x + b.x) / 2, 0.06, (a.z + b.z) / 2);
       road.receiveShadow = true;
-      this.scene.add(road);
-      this.raceTrackMeshes.push(road);
+      add(road);
 
-      // Barriers
+      // Center dashed line
+      const dashCount = Math.floor(len / 10);
+      const dashMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+      for (let d = 0; d < dashCount; d++) {
+        const t = (d + 0.3) / dashCount;
+        const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 4), dashMat);
+        dash.rotation.x = -Math.PI / 2;
+        dash.rotation.z = -angle;
+        dash.position.set(a.x + dx * t, 0.065, a.z + dz * t);
+        add(dash);
+      }
+
+      // Barriers + curbs
       [-1, 1].forEach(side => {
         const barrier = new THREE.Mesh(
-          new THREE.BoxGeometry(0.5, 1.2, len + trackWidth),
+          new THREE.BoxGeometry(0.6, 1.4, len + trackWidth),
           (Math.floor(i + (side > 0 ? 0 : 1)) % 2 === 0) ? barrierMat : whiteBarrierMat
         );
-        const perpX = -Math.sin(angle + Math.PI / 2) * (trackWidth / 2);
-        const perpZ = -Math.cos(angle + Math.PI / 2) * (trackWidth / 2);
+        const perpX = -Math.sin(angle + Math.PI / 2) * (trackWidth / 2 + 0.3);
+        const perpZ = -Math.cos(angle + Math.PI / 2) * (trackWidth / 2 + 0.3);
         barrier.position.set(
           (a.x + b.x) / 2 + perpX * side,
-          0.6,
+          0.7,
           (a.z + b.z) / 2 + perpZ * side
         );
         barrier.rotation.y = angle;
-        this.scene.add(barrier);
-        this.raceTrackMeshes.push(barrier);
+        add(barrier);
+
+        // Curb strips (red/white alternating)
+        const curbCount = Math.floor(len / 6);
+        for (let c = 0; c < curbCount; c++) {
+          const ct = (c + 0.5) / curbCount;
+          const curbPerpX = -Math.sin(angle + Math.PI / 2) * (trackWidth / 2 - 0.5);
+          const curbPerpZ = -Math.cos(angle + Math.PI / 2) * (trackWidth / 2 - 0.5);
+          const curb = new THREE.Mesh(
+            new THREE.PlaneGeometry(1.5, 3),
+            c % 2 === 0 ? curbRedMat : curbWhiteMat
+          );
+          curb.rotation.x = -Math.PI / 2;
+          curb.rotation.z = -angle;
+          curb.position.set(
+            a.x + dx * ct + curbPerpX * side,
+            0.062,
+            a.z + dz * ct + curbPerpZ * side
+          );
+          add(curb);
+        }
 
         // Add as collider
         this.colliders.push({
           x: barrier.position.x,
           z: barrier.position.z,
-          hw: 0.5,
+          hw: 0.6,
           hd: (len + trackWidth) / 2,
           type: 'box',
-          raceTrack: true, // flag for cleanup
+          raceTrack: true,
         });
       });
     }
 
-    // Start/finish line
+    // ── Start/finish line ──
+    const sa = cps[0], sb = cps[1];
+    const sAngle = Math.atan2(sb.x - sa.x, sb.z - sa.z);
+
     const startLine = new THREE.Mesh(
-      new THREE.PlaneGeometry(trackWidth, 2),
+      new THREE.PlaneGeometry(trackWidth, 3),
       new THREE.MeshStandardMaterial({ color: 0xffffff })
     );
     startLine.rotation.x = -Math.PI / 2;
-    const sa = cps[0], sb = cps[1];
-    const sAngle = Math.atan2(sb.x - sa.x, sb.z - sa.z);
     startLine.rotation.z = -sAngle;
     startLine.position.set(sa.x, 0.07, sa.z);
-    this.scene.add(startLine);
-    this.raceTrackMeshes.push(startLine);
+    add(startLine);
 
-    // Checkerboard pattern on start line
+    // Checkerboard pattern
     const checkerMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-    for (let c = 0; c < 8; c++) {
-      if (c % 2 === 0) {
-        const sq = new THREE.Mesh(new THREE.PlaneGeometry(trackWidth / 8, 1), checkerMat);
+    for (let c = 0; c < 12; c++) {
+      for (let r = 0; r < 2; r++) {
+        if ((c + r) % 2 === 0) continue;
+        const sq = new THREE.Mesh(new THREE.PlaneGeometry(trackWidth / 12, 1.5), checkerMat);
         sq.rotation.x = -Math.PI / 2;
         sq.rotation.z = -sAngle;
-        const offset = (c - 3.5) * (trackWidth / 8);
+        const colOff = (c - 5.5) * (trackWidth / 12);
+        const rowOff = (r - 0.5) * 1.5;
         sq.position.set(
-          sa.x + Math.cos(sAngle) * offset,
+          sa.x + Math.cos(sAngle) * colOff + Math.sin(sAngle) * rowOff,
           0.071,
-          sa.z - Math.sin(sAngle) * offset
+          sa.z - Math.sin(sAngle) * colOff + Math.cos(sAngle) * rowOff
         );
-        this.scene.add(sq);
-        this.raceTrackMeshes.push(sq);
+        add(sq);
       }
+    }
+
+    // ── Grandstands along the straight ──
+    const standMat = new THREE.MeshStandardMaterial({ color: 0x555566 });
+    const seatMat = new THREE.MeshStandardMaterial({ color: 0x3355aa });
+    // Place grandstands near start line
+    [-1, 1].forEach(side => {
+      const standGroup = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.BoxGeometry(60, 8, 12), standMat);
+      base.position.y = 4;
+      standGroup.add(base);
+      // Seats (colored rows)
+      for (let row = 0; row < 4; row++) {
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(58, 0.5, 2), seatMat);
+        seat.position.set(0, 1 + row * 2, -4 + row * 2.5);
+        standGroup.add(seat);
+      }
+      const perpX = -Math.sin(sAngle + Math.PI / 2) * (trackWidth / 2 + 20);
+      const perpZ = -Math.cos(sAngle + Math.PI / 2) * (trackWidth / 2 + 20);
+      standGroup.position.set(sa.x + perpX * side, 0, sa.z + perpZ * side);
+      standGroup.rotation.y = sAngle + (side > 0 ? 0 : Math.PI);
+      add(standGroup);
+    });
+
+    // ── Trackside lights (poles around the oval) ──
+    const lightPoleMat = new THREE.MeshStandardMaterial({ color: 0x666666 });
+    const lightBulbMat2 = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffdd, emissiveIntensity: 0.8 });
+    for (let i = 0; i < cps.length; i++) {
+      const cp = cps[i];
+      [-1, 1].forEach(side => {
+        const angle = Math.atan2(
+          cps[(i + 1) % cps.length].x - cp.x,
+          cps[(i + 1) % cps.length].z - cp.z
+        );
+        const perpX = -Math.sin(angle + Math.PI / 2) * (trackWidth / 2 + 8);
+        const perpZ = -Math.cos(angle + Math.PI / 2) * (trackWidth / 2 + 8);
+        const px = cp.x + perpX * side;
+        const pz = cp.z + perpZ * side;
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 12, 6), lightPoleMat);
+        pole.position.set(px, 6, pz);
+        add(pole);
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), lightBulbMat2);
+        lamp.position.set(px, 12, pz);
+        add(lamp);
+      });
+    }
+
+    // ── Decorative trees outside barriers ──
+    const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x664422 });
+    const treeLeafMat = new THREE.MeshStandardMaterial({ color: 0x226633, roughness: 0.8 });
+    for (let i = 0; i < 60; i++) {
+      const angle = (i / 60) * Math.PI * 2;
+      const rx = 600, rz = 300; // match oval radii
+      const spread = trackWidth / 2 + 30 + Math.random() * 40;
+      const tx = Math.cos(angle) * (rx + spread * Math.sign(Math.cos(angle)));
+      const tz = Math.sin(angle) * (rz + spread * Math.sign(Math.sin(angle)));
+      const treeG = new THREE.Group();
+      const trunkH = 3 + Math.random() * 3;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.35, trunkH, 6), treeTrunkMat);
+      trunk.position.y = trunkH / 2;
+      treeG.add(trunk);
+      const leafR = 2 + Math.random() * 2;
+      const leaves = new THREE.Mesh(new THREE.SphereGeometry(leafR, 7, 7), treeLeafMat);
+      leaves.position.y = trunkH + leafR * 0.4;
+      treeG.add(leaves);
+      treeG.position.set(tx, -0.1, tz);
+      add(treeG);
     }
   }
 
   removeRaceTrack() {
     this.raceTrackMeshes.forEach(m => this.scene.remove(m));
     this.raceTrackMeshes = [];
+    this._raceSun = null;
     this.colliders = this.colliders.filter(c => !c.raceTrack);
+    // Restore free-roam world
+    this.showFreeroam();
   }
 
   addCheckpoints(track) {

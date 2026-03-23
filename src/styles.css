@@ -184,6 +184,11 @@ body {
   font-size: 14px;
 }
 
+.form-group select option {
+  background: #1a1a2a;
+  color: #fff;
+}
+
 .form-group input[type="checkbox"] {
   width: 18px;
   height: 18px;

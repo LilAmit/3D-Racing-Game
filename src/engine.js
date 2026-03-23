@@ -55,8 +55,8 @@ export class GameEngine {
     const { mode = 0, lookingBack = false, baseFov = 75, nitro = false, drifting = false } = opts;
 
     const speedFactor = Math.min(Math.abs(speed) / 200, 1);
-    const chaseDist = 7 + speedFactor * 2;   // stays close even at max speed
-    const chaseHeight = 3 + speedFactor * 1.5;
+    const chaseDist = 4 + speedFactor * 1;   // very close chase cam (4–5 range)
+    const chaseHeight = 2.2 + speedFactor * 0.8;
 
     let targetPos, targetLook;
 
@@ -79,9 +79,9 @@ export class GameEngine {
         position.z - Math.cos(rotation) * chaseDist
       );
       targetLook = new THREE.Vector3(
-        position.x + Math.sin(rotation) * 6,
-        position.y + 0.5,
-        position.z + Math.cos(rotation) * 6
+        position.x + Math.sin(rotation) * 3,
+        position.y + 0.3,
+        position.z + Math.cos(rotation) * 3
       );
     } else if (mode === 1) {
       // Top-down
