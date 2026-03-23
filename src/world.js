@@ -87,35 +87,27 @@ export const TRACKS = {
     startPos: { x: -200, z: 0 },
     startAngle: -Math.PI / 2,
   },
-  // Dedicated race-only oval track
+  // Dedicated race-only track — long circular road
   racetrack: {
-    name: 'Speedway Oval',
-    checkpoints: [
-      { x: 400, z: 0, radius: 25 },
-      { x: 200, z: -350, radius: 25 },
-      { x: -200, z: -350, radius: 25 },
-      { x: -400, z: 0, radius: 25 },
-      { x: -200, z: 350, radius: 25 },
-      { x: 200, z: 350, radius: 25 },
-    ],
-    startPos: { x: 350, z: 50 },
+    name: 'Race Circuit',
+    // 12 checkpoints around a large elongated oval (~1.8km long road)
+    checkpoints: (() => {
+      const cps = [];
+      const segments = 12;
+      const radiusX = 600; // wide
+      const radiusZ = 300; // tall
+      for (let i = 0; i < segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        cps.push({
+          x: Math.round(Math.cos(angle) * radiusX),
+          z: Math.round(Math.sin(angle) * radiusZ),
+          radius: 30,
+        });
+      }
+      return cps;
+    })(),
+    startPos: { x: 600, z: 0 },
     startAngle: -Math.PI / 2,
-    dedicated: true, // flag: this track has its own built geometry
-  },
-  grandprix: {
-    name: 'Grand Prix Circuit',
-    checkpoints: [
-      { x: 500, z: 0, radius: 22 },
-      { x: 700, z: -400, radius: 22 },
-      { x: 300, z: -700, radius: 22 },
-      { x: -200, z: -600, radius: 22 },
-      { x: -600, z: -300, radius: 22 },
-      { x: -600, z: 200, radius: 22 },
-      { x: -200, z: 500, radius: 22 },
-      { x: 300, z: 400, radius: 22 },
-    ],
-    startPos: { x: 400, z: 100 },
-    startAngle: 0,
     dedicated: true,
   },
 };

@@ -55,8 +55,8 @@ export class GameEngine {
     const { mode = 0, lookingBack = false, baseFov = 75, nitro = false, drifting = false } = opts;
 
     const speedFactor = Math.min(Math.abs(speed) / 200, 1);
-    const chaseDist = 10 + speedFactor * 6;
-    const chaseHeight = 4 + speedFactor * 3;
+    const chaseDist = 7 + speedFactor * 2;   // stays close even at max speed
+    const chaseHeight = 3 + speedFactor * 1.5;
 
     let targetPos, targetLook;
 

@@ -282,7 +282,7 @@ class GarageManager {
       card.innerHTML = `
         <div class="car-preview" style="background: linear-gradient(135deg, ${color}, ${color}88); border: 2px solid ${color}"></div>
         <div class="car-name">${def.name}</div>
-        <div class="car-price">${owned ? (selected ? '\u2713 Selected' : 'Owned') : '\ud83e\ude99 ' + def.price}</div>
+        <div class="car-price">${owned ? (selected ? '\u2713 Selected' : 'Owned') : '$ ' + def.price}</div>
         <div class="car-stats">
           <div class="stat-bar"><label>Speed</label><div class="bar"><div class="bar-fill" style="width: ${def.speed / 2.6}%"></div></div></div>
           <div class="stat-bar"><label>Accel</label><div class="bar"><div class="bar-fill" style="width: ${def.acceleration * 10}%"></div></div></div>
@@ -295,7 +295,7 @@ class GarageManager {
         if (owned) {
           this.selectCar(def.id);
         } else if (this.coins >= def.price) {
-          if (confirm(`Buy ${def.name} for \ud83e\ude99${def.price}?`)) {
+          if (confirm(`Buy ${def.name} for $${def.price}?`)) {
             this.buyCar(def.id);
           }
         }
