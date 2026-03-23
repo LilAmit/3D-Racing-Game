@@ -4,7 +4,7 @@ const DEFAULT_SETTINGS = {
   brightness: 1,
   fov: 75,
   shadows: true,
-  drawDistance: 800,
+  drawDistance: 1200,
   mouseSensitivity: 1,
   invertY: false,
   masterVolume: 0.7,

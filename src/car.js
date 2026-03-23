@@ -4,6 +4,12 @@ import * as THREE from 'three';
 import { buildCarMesh } from './garage.js';
 import { audio } from './audio.js';
 
+// Speed feel multiplier — makes displayed km/h feel realistic.
+// Real 140 km/h ≈ 39 m/s. In-game world units are ~1m but objects are small,
+// so we multiply actual movement speed by this factor to make scenery fly past
+// at a rate that matches the speedometer reading.
+const SPEED_FEEL = 2.8;
+
 export class Car {
   constructor(carDef, scene) {
     this.def = carDef;
@@ -18,13 +24,16 @@ export class Car {
     this.yVelocity = 0;
     this.onGround = true;
 
-    // Derived from car definition
-    this.maxSpeed = carDef.speed / 3.6;             // km/h → m/s
-    this.accelForce = carDef.acceleration * 5;       // m/s²
-    this.brakeDecel = carDef.braking * 6;            // m/s²
-    this.maxSteerRate = 1.5 + carDef.handling * 0.12; // rad/s
+    // Derived from car definition — tuned with SPEED_FEEL
+    this.maxSpeed = (carDef.speed / 3.6) * SPEED_FEEL;      // display km/h → actual m/s with feel
+    this.accelForce = carDef.acceleration * 5 * SPEED_FEEL;  // scale accel to match
+    this.brakeDecel = carDef.braking * 6 * SPEED_FEEL;
+    this.maxSteerRate = 1.5 + carDef.handling * 0.12;
     this.lateralGripNormal = 10 + carDef.handling * 0.8;
     this.lateralGripDrift = 2.5;
+
+    // Display speed cap (the number shown on HUD)
+    this.displayMaxSpeed = carDef.speed;
 
     // State
     this.speed = 0;       // display speed in km/h
@@ -53,7 +62,6 @@ export class Car {
     this.nitro = inputs.nitro && this.nitroFuel > 0 && this.throttle > 0;
 
     const targetSteer = (inputs.left ? 1 : 0) - (inputs.right ? 1 : 0);
-    // Smooth steering — responsive but not instant
     if (Math.abs(targetSteer) > 0.1) {
       this.steerSmooth += (targetSteer - this.steerSmooth) * Math.min(8 * dt, 1);
     } else {
@@ -64,21 +72,18 @@ export class Car {
 
     // === VECTORS ===
     const forward = new THREE.Vector3(Math.sin(this.rotation), 0, Math.cos(this.rotation));
-    const right = new THREE.Vector3(Math.cos(this.rotation), 0, -Math.sin(this.rotation));
-
     const forwardSpeed = this.velocity.dot(forward);
     const absForwardSpeed = Math.abs(forwardSpeed);
     const speedNorm = Math.min(absForwardSpeed / this.maxSpeed, 1);
 
     // === ACCELERATION ===
     let accel = this.accelForce * this.throttle;
-    accel *= (1 - speedNorm * 0.4); // less force at high speed
+    accel *= (1 - speedNorm * 0.4);
     if (this.nitro) {
       accel *= 1.6;
       this.nitroFuel = Math.max(0, this.nitroFuel - dt * 20);
     }
-    // Don't accelerate past max reverse speed
-    if (forwardSpeed < -12 && this.throttle < 0) accel = 0;
+    if (forwardSpeed < -12 * SPEED_FEEL && this.throttle < 0) accel = 0;
 
     if (this.onGround) {
       this.velocity.addScaledVector(forward, accel * dt);
@@ -94,22 +99,19 @@ export class Car {
     }
 
     // === STEERING ===
-    // Only steer when moving
-    const steerFactor = Math.min(absForwardSpeed / 4, 1);
+    const steerFactor = Math.min(absForwardSpeed / (4 * SPEED_FEEL), 1);
     const speedSteerReduction = 1 - speedNorm * 0.4;
     const steerAmount = this.steer * this.maxSteerRate * steerFactor * speedSteerReduction;
-    // Reverse steering direction when going backward
     const steerDir = forwardSpeed >= 0 ? 1 : -1;
     this.rotation += steerAmount * steerDir * dt;
 
     // === DRIFT MECHANICS ===
-    const handbraking = this.braking && absForwardSpeed > 5;
-    const powerSlide = Math.abs(this.steer) > 0.5 && absForwardSpeed > 15 && this.throttle > 0.5;
+    const handbraking = this.braking && absForwardSpeed > 5 * SPEED_FEEL;
+    const powerSlide = Math.abs(this.steer) > 0.5 && absForwardSpeed > 15 * SPEED_FEEL && this.throttle > 0.5;
     this.drifting = handbraking || powerSlide;
 
     // === LATERAL FRICTION (grip) ===
     if (this.onGround) {
-      // Recalculate right vector after rotation change
       const rightNow = new THREE.Vector3(Math.cos(this.rotation), 0, -Math.sin(this.rotation));
       const lateralSpeed = this.velocity.dot(rightNow);
       const grip = this.drifting ? this.lateralGripDrift : this.lateralGripNormal;
@@ -118,7 +120,7 @@ export class Car {
     }
 
     // Drift skid sound
-    if (this.drifting && absForwardSpeed > 8) {
+    if (this.drifting && absForwardSpeed > 8 * SPEED_FEEL) {
       const now = performance.now();
       if (now - this._lastSkidTime > 350) {
         audio.playSkid(0.3);
@@ -129,13 +131,11 @@ export class Car {
     // === ROLLING FRICTION + AIR DRAG ===
     if (this.onGround) {
       if (Math.abs(this.throttle) < 0.1 && !this.braking) {
-        // Coast to stop
         this.velocity.multiplyScalar(Math.max(0, 1 - 2.5 * dt));
       }
-      // Air drag (quadratic)
       const hSpeed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
       if (hSpeed > 0.5) {
-        const dragFactor = 0.0008 * hSpeed;
+        const dragFactor = 0.0003 * hSpeed; // Reduced drag for higher speeds
         this.velocity.x *= Math.max(0, 1 - dragFactor * dt);
         this.velocity.z *= Math.max(0, 1 - dragFactor * dt);
       }
@@ -151,7 +151,6 @@ export class Car {
     }
 
     // === POSITION UPDATE ===
-    // Velocity is horizontal-only; y-axis handled separately
     this.velocity.y = 0;
     this.position.x += this.velocity.x * dt;
     this.position.z += this.velocity.z * dt;
@@ -168,8 +167,10 @@ export class Car {
     }
 
     // === DISPLAY VALUES ===
+    // Convert actual velocity back to display km/h
     const fwdNow = new THREE.Vector3(Math.sin(this.rotation), 0, Math.cos(this.rotation));
-    this.speed = Math.abs(this.velocity.dot(fwdNow)) * 3.6;
+    const actualMps = Math.abs(this.velocity.dot(fwdNow));
+    this.speed = (actualMps / SPEED_FEEL) * 3.6; // Undo feel factor for display
     this._updateGear();
 
     // === SYNC MESH ===
@@ -181,25 +182,22 @@ export class Car {
     if (this.mesh.userData.wheels) {
       const wheelSpin = forwardSpeed * dt * 3;
       this.mesh.userData.wheels.forEach((w, i) => {
-        w.children[0].rotation.x += wheelSpin; // tire
-        // Front wheels turn with steering
+        w.children[0].rotation.x += wheelSpin;
         if (i < 2) {
           w.rotation.y = this.steer * 0.3;
         }
       });
     }
 
-    // Audio
+    // Audio — pass normalized speed and throttle
     audio.updateEngine(speedNorm, Math.abs(this.throttle));
 
     return this.getState();
   }
 
   _updateYPhysics(dt, ramps) {
-    // Check ramps
     let onRamp = false;
     for (const ramp of ramps) {
-      // Transform car position to ramp local space
       const relX = this.position.x - ramp.x;
       const relZ = this.position.z - ramp.z;
       const cos = Math.cos(-ramp.rotY);
@@ -211,23 +209,20 @@ export class Car {
       const halfD = ramp.d / 2;
 
       if (Math.abs(localX) < halfW && localZ > -halfD && localZ < halfD) {
-        // On ramp — height increases from back (-halfD = 0) to front (+halfD = rampH)
         const t = (localZ + halfD) / (halfD * 2);
         const rampY = t * ramp.h;
         if (this.position.y <= rampY + 0.3) {
           this.position.y = rampY;
           this.yVelocity = 0;
           onRamp = true;
-          // Launch off the top edge
           const hSpeed = Math.sqrt(this.velocity.x ** 2 + this.velocity.z ** 2);
-          if (t > 0.9 && hSpeed > 8) {
-            this.yVelocity = Math.min(hSpeed * 0.35, 12);
+          if (t > 0.9 && hSpeed > 8 * SPEED_FEEL) {
+            this.yVelocity = Math.min(hSpeed * 0.25, 14);
           }
         }
       }
     }
 
-    // Gravity when airborne
     if (!onRamp) {
       this.yVelocity -= 25 * dt;
       this.position.y += this.yVelocity * dt;
@@ -237,7 +232,6 @@ export class Car {
       }
     }
 
-    // Hard floor — car can never go below ground
     if (this.position.y < 0) {
       this.position.y = 0;
       this.yVelocity = 0;
@@ -251,7 +245,6 @@ export class Car {
 
     for (const c of colliders) {
       if (c.type === 'box') {
-        // Circle vs AABB
         const closestX = Math.max(c.x - c.hw, Math.min(this.position.x, c.x + c.hw));
         const closestZ = Math.max(c.z - c.hd, Math.min(this.position.z, c.z + c.hd));
         const dx = this.position.x - closestX;
@@ -267,7 +260,6 @@ export class Car {
             const push = r - dist;
             this.position.x += nx * push;
             this.position.z += nz * push;
-            // Reflect velocity along normal
             const dot = this.velocity.x * nx + this.velocity.z * nz;
             if (dot < 0) {
               this.velocity.x -= dot * nx * 1.5;
@@ -276,14 +268,12 @@ export class Car {
             this.velocity.multiplyScalar(0.6);
             collided = true;
           } else {
-            // Inside box — push out to nearest edge
             this.position.x = c.x + (this.position.x > c.x ? c.hw + r : -(c.hw + r));
             this.velocity.multiplyScalar(0.5);
             collided = true;
           }
         }
       } else if (c.type === 'circle') {
-        // Circle vs circle
         const dx = this.position.x - c.x;
         const dz = this.position.z - c.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
@@ -299,8 +289,8 @@ export class Car {
       }
     }
 
-    // World boundaries
-    const bound = 790;
+    // World boundaries — expanded for bigger map
+    const bound = 1580;
     if (this.position.x > bound) { this.position.x = bound; this.velocity.x = 0; }
     if (this.position.x < -bound) { this.position.x = -bound; this.velocity.x = 0; }
     if (this.position.z > bound) { this.position.z = bound; this.velocity.z = 0; }
@@ -310,7 +300,7 @@ export class Car {
     if (collided) {
       const now = performance.now();
       if (now - this._lastCollisionTime > 300) {
-        const intensity = Math.min(this.velocity.length() / 20, 1);
+        const intensity = Math.min(this.velocity.length() / (20 * SPEED_FEEL), 1);
         if (intensity > 0.15) audio.playCollision(intensity);
         this._lastCollisionTime = now;
       }
@@ -318,17 +308,17 @@ export class Car {
   }
 
   _updateGear() {
+    const maxSpd = this.displayMaxSpeed;
     const s = this.speed;
-    if (s < 30) this.gear = 1;
-    else if (s < 60) this.gear = 2;
-    else if (s < 100) this.gear = 3;
-    else if (s < 150) this.gear = 4;
-    else if (s < 210) this.gear = 5;
-    else this.gear = 6;
+    // Gear ratios scale with the car's max speed
+    const gearThresholds = [0, maxSpd * 0.15, maxSpd * 0.3, maxSpd * 0.5, maxSpd * 0.7, maxSpd * 0.85];
+    this.gear = 1;
+    for (let i = 1; i < gearThresholds.length; i++) {
+      if (s >= gearThresholds[i]) this.gear = i + 1;
+    }
 
-    const gearRanges = [0, 30, 60, 100, 150, 210];
-    const gearMin = gearRanges[this.gear - 1];
-    const gearMax = this.gear < 6 ? gearRanges[this.gear] : 280;
+    const gearMin = gearThresholds[this.gear - 1];
+    const gearMax = this.gear < 6 ? gearThresholds[this.gear] : maxSpd * 1.1;
     this.rpm = Math.max(0, Math.min(1, (s - gearMin) / (gearMax - gearMin)));
   }
 

@@ -2,13 +2,40 @@
 
 import * as THREE from 'three';
 
+// 5 cars: price 0 (starter), 150, 500, 1200, 2000
+// Starter is slow (70 kmh), non-sporty hatchback
+// Each car faster with price — speed, accel, handling scale up
 export const CAR_DEFS = [
-  { id: 'starter', name: 'Rookie RS', price: 0, color: 0x3388ff, accentColor: 0xffffff, speed: 140, acceleration: 7, handling: 7, braking: 6, bodyStyle: 'gt' },
-  { id: 'sport', name: 'Viper GT3', price: 500, color: 0xff2222, accentColor: 0x111111, speed: 180, acceleration: 9, handling: 8, braking: 7, bodyStyle: 'gt' },
-  { id: 'muscle', name: 'Thunder V8', price: 800, color: 0xff8800, accentColor: 0x222222, speed: 200, acceleration: 10, handling: 5, braking: 6, bodyStyle: 'muscle' },
-  { id: 'drift', name: 'Drift Phantom', price: 1200, color: 0x00ff88, accentColor: 0x000000, speed: 170, acceleration: 7, handling: 10, braking: 8, bodyStyle: 'drift' },
-  { id: 'super', name: 'Zenith LMP', price: 2500, color: 0xffcc00, accentColor: 0x333333, speed: 240, acceleration: 10, handling: 9, braking: 9, bodyStyle: 'prototype' },
-  { id: 'hyper', name: 'Hyperion F1', price: 5000, color: 0x8800ff, accentColor: 0x00ffcc, speed: 280, acceleration: 10, handling: 10, braking: 10, bodyStyle: 'formula' },
+  {
+    id: 'commuter', name: 'Commuter 1.4', price: 0,
+    color: 0x7788aa, accentColor: 0xcccccc,
+    speed: 70, acceleration: 4, handling: 5, braking: 4,
+    bodyStyle: 'hatchback',
+  },
+  {
+    id: 'sedan', name: 'Turbo Sedan', price: 150,
+    color: 0x3388ff, accentColor: 0xffffff,
+    speed: 120, acceleration: 6, handling: 6, braking: 5,
+    bodyStyle: 'gt',
+  },
+  {
+    id: 'sport', name: 'Viper GT3', price: 500,
+    color: 0xff2222, accentColor: 0x111111,
+    speed: 160, acceleration: 8, handling: 7, braking: 7,
+    bodyStyle: 'gt',
+  },
+  {
+    id: 'muscle', name: 'Thunder V8', price: 1200,
+    color: 0xff8800, accentColor: 0x222222,
+    speed: 200, acceleration: 9, handling: 6, braking: 7,
+    bodyStyle: 'muscle',
+  },
+  {
+    id: 'super', name: 'Zenith Hyper', price: 2000,
+    color: 0xffcc00, accentColor: 0x333333,
+    speed: 260, acceleration: 10, handling: 9, braking: 9,
+    bodyStyle: 'prototype',
+  },
 ];
 
 export function buildCarMesh(def) {
@@ -26,15 +53,15 @@ export function buildCarMesh(def) {
   const s = def.bodyStyle;
 
   let bodyW, bodyH, bodyL, cabinH, cabinL, cabinZ, wheelR, wheelW, fenderH;
-  if (s === 'formula') {
-    bodyW = 1.4; bodyH = 0.25; bodyL = 4.8; cabinH = 0.35; cabinL = 1.0; cabinZ = -0.4; wheelR = 0.34; wheelW = 0.28; fenderH = 0.1;
+  if (s === 'hatchback') {
+    // Boxy, tall, short — commuter car look
+    bodyW = 1.7; bodyH = 0.45; bodyL = 3.6; cabinH = 0.55; cabinL = 1.6; cabinZ = -0.2; wheelR = 0.28; wheelW = 0.2; fenderH = 0.08;
   } else if (s === 'prototype') {
     bodyW = 1.9; bodyH = 0.3; bodyL = 4.6; cabinH = 0.35; cabinL = 1.2; cabinZ = -0.2; wheelR = 0.33; wheelW = 0.26; fenderH = 0.12;
   } else if (s === 'muscle') {
     bodyW = 1.95; bodyH = 0.4; bodyL = 4.7; cabinH = 0.42; cabinL = 1.5; cabinZ = -0.3; wheelR = 0.35; wheelW = 0.3; fenderH = 0.15;
-  } else if (s === 'drift') {
-    bodyW = 1.8; bodyH = 0.35; bodyL = 4.4; cabinH = 0.38; cabinL = 1.3; cabinZ = -0.2; wheelR = 0.32; wheelW = 0.24; fenderH = 0.12;
   } else {
+    // gt style
     bodyW = 1.85; bodyH = 0.35; bodyL = 4.5; cabinH = 0.4; cabinL = 1.4; cabinZ = -0.15; wheelR = 0.33; wheelW = 0.24; fenderH = 0.12;
   }
 
@@ -65,25 +92,18 @@ export function buildCarMesh(def) {
   // Rear diffuser
   group.add(new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.9, 0.12, 0.4), carbonMat).translateY(baseY - bodyH / 2 + 0.06).translateZ(-bodyL / 2 - 0.1));
 
-  // Cabin / cockpit
-  if (s === 'formula') {
-    const cockpit = new THREE.Mesh(new THREE.BoxGeometry(0.6, cabinH, cabinL * 0.7), carbonMat);
-    cockpit.position.set(0, baseY + bodyH / 2 + cabinH / 2, cabinZ);
-    cockpit.castShadow = true;
-    group.add(cockpit);
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.03, 8, 16, Math.PI), carbonMat);
-    halo.position.set(0, baseY + bodyH / 2 + cabinH, cabinZ + cabinL * 0.2);
-    halo.rotation.x = Math.PI / 2;
-    halo.rotation.z = Math.PI;
-    group.add(halo);
-  } else {
-    const windshield = new THREE.Mesh(new THREE.BoxGeometry(bodyW - 0.3, cabinH, cabinL), glassMat);
-    windshield.position.set(0, baseY + bodyH / 2 + cabinH / 2, cabinZ);
-    windshield.castShadow = true;
-    group.add(windshield);
-    if (s === 'muscle' || s === 'gt') {
-      group.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.3), accentMat).translateY(baseY + bodyH / 2 + cabinH + 0.04).translateZ(cabinZ + cabinL / 2 - 0.2));
-    }
+  // Cabin / windshield
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(bodyW - 0.3, cabinH, cabinL), glassMat);
+  windshield.position.set(0, baseY + bodyH / 2 + cabinH / 2, cabinZ);
+  windshield.castShadow = true;
+  group.add(windshield);
+
+  if (s === 'hatchback') {
+    // Roof rack for commuter look
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(bodyW * 0.6, 0.04, cabinL * 0.8), carbonMat)
+      .translateY(baseY + bodyH / 2 + cabinH + 0.02).translateZ(cabinZ));
+  } else if (s === 'muscle' || s === 'gt') {
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.3), accentMat).translateY(baseY + bodyH / 2 + cabinH + 0.04).translateZ(cabinZ + cabinL / 2 - 0.2));
   }
 
   // Fenders
@@ -94,15 +114,14 @@ export function buildCarMesh(def) {
     ff.position.set(side * (bodyW / 2 + fenderW / 2), baseY + fenderH / 2, wheelZ_f);
     ff.castShadow = true;
     group.add(ff);
-    const rfw = s === 'formula' ? fenderW * 1.5 : fenderW;
-    const rf = new THREE.Mesh(new THREE.BoxGeometry(rfw, bodyH + fenderH, 1.0), bodyMat);
-    rf.position.set(side * (bodyW / 2 + rfw / 2), baseY + fenderH / 2, wheelZ_r);
+    const rf = new THREE.Mesh(new THREE.BoxGeometry(fenderW, bodyH + fenderH, 1.0), bodyMat);
+    rf.position.set(side * (bodyW / 2 + fenderW / 2), baseY + fenderH / 2, wheelZ_r);
     rf.castShadow = true;
     group.add(rf);
   });
 
-  // Racing stripe
-  if (s !== 'formula') {
+  // Racing stripe (not on hatchback)
+  if (s !== 'hatchback') {
     group.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.01, bodyL + 0.6), accentMat).translateY(baseY + bodyH / 2 + 0.01).translateZ(0.1));
   }
 
@@ -152,7 +171,7 @@ export function buildCarMesh(def) {
   });
 
   // Exhaust pipes
-  const exhaustCount = s === 'muscle' ? 4 : 2;
+  const exhaustCount = s === 'muscle' ? 4 : (s === 'hatchback' ? 1 : 2);
   const exhaustSpacing = s === 'muscle' ? 0.2 : 0.35;
   for (let i = 0; i < exhaustCount; i++) {
     const xOff = (i - (exhaustCount - 1) / 2) * exhaustSpacing;
@@ -162,9 +181,9 @@ export function buildCarMesh(def) {
     group.add(exhaust);
   }
 
-  // Spoiler / Wing
-  if (s === 'formula' || s === 'prototype') {
-    const wingW = s === 'formula' ? bodyW + 0.8 : bodyW + 0.4;
+  // Spoiler / Wing (not on hatchback or sedan)
+  if (s === 'prototype') {
+    const wingW = bodyW + 0.4;
     const wingY = baseY + bodyH + cabinH + 0.25;
     group.add(new THREE.Mesh(new THREE.BoxGeometry(wingW, 0.04, 0.35), carbonMat).translateY(wingY).translateZ(-bodyL / 2 + 0.2));
     [-wingW / 2, wingW / 2].forEach(x => {
@@ -173,14 +192,8 @@ export function buildCarMesh(def) {
     [-0.4, 0.4].forEach(x => {
       group.add(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.3, 6), carbonMat).translateX(x).translateY(wingY - 0.18).translateZ(-bodyL / 2 + 0.2));
     });
-    if (s === 'formula') {
-      group.add(new THREE.Mesh(new THREE.BoxGeometry(bodyW + 0.6, 0.03, 0.25), carbonMat).translateY(baseY - bodyH / 2 + 0.03).translateZ(bodyL / 2 + 0.6));
-      [-0.8, 0.8].forEach(x => {
-        group.add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.3), carbonMat).translateX(x).translateY(baseY - bodyH / 2 + 0.08).translateZ(bodyL / 2 + 0.6));
-      });
-    }
-  } else {
-    const spoilerW = s === 'drift' ? bodyW + 0.3 : bodyW + 0.1;
+  } else if (s !== 'hatchback') {
+    const spoilerW = bodyW + 0.1;
     const spoilerY = baseY + bodyH / 2 + cabinH + 0.15;
     group.add(new THREE.Mesh(new THREE.BoxGeometry(spoilerW, 0.04, 0.25), carbonMat).translateY(spoilerY).translateZ(-bodyL / 2 + 0.3));
     [-0.5, 0.5].forEach(x => {
@@ -189,14 +202,14 @@ export function buildCarMesh(def) {
   }
 
   // Side mirrors
-  if (s !== 'formula') {
-    [-1, 1].forEach(side => {
-      group.add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.12), carbonMat).translateX(side * (bodyW / 2 + 0.12)).translateY(baseY + bodyH / 2 + cabinH * 0.3).translateZ(cabinZ + cabinL / 2 + 0.1));
-    });
-  }
+  [-1, 1].forEach(side => {
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.12), carbonMat).translateX(side * (bodyW / 2 + 0.12)).translateY(baseY + bodyH / 2 + cabinH * 0.3).translateZ(cabinZ + cabinL / 2 + 0.1));
+  });
 
-  // Hood vent
-  group.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.4), carbonMat).translateY(baseY + bodyH / 2 + 0.03).translateZ(bodyL / 4));
+  // Hood vent (not on hatchback)
+  if (s !== 'hatchback') {
+    group.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.4), carbonMat).translateY(baseY + bodyH / 2 + 0.03).translateZ(bodyL / 4));
+  }
 
   group.userData.wheels = wheels;
   return group;
@@ -206,8 +219,14 @@ export function buildCarMesh(def) {
 class GarageManager {
   constructor() {
     this.coins = parseInt(localStorage.getItem('racing_coins') || '0');
-    this.owned = JSON.parse(localStorage.getItem('racing_owned_cars') || '["starter"]');
-    this.selected = localStorage.getItem('racing_selected_car') || 'starter';
+    this.owned = JSON.parse(localStorage.getItem('racing_owned_cars') || '["commuter"]');
+    this.selected = localStorage.getItem('racing_selected_car') || 'commuter';
+    // Migrate: if owned has old car IDs that no longer exist, reset
+    const validIds = CAR_DEFS.map(c => c.id);
+    this.owned = this.owned.filter(id => validIds.includes(id));
+    if (!this.owned.includes('commuter')) this.owned.push('commuter');
+    if (!validIds.includes(this.selected)) this.selected = 'commuter';
+    this.save();
   }
 
   save() {

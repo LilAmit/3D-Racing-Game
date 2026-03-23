@@ -1,20 +1,26 @@
-// Multiplayer via WebSocket — syncs car positions with friends using friend tags
+// Multiplayer via WebSocket — connects to macOS Sonoma server on Render
+// Uses /velocity path with room-based matchmaking (no JWT needed)
 
 import * as THREE from 'three';
 import { buildCarMesh, CAR_DEFS } from './garage.js';
+
+// Server URL — uses the macOS Sonoma backend
+const WS_SERVER = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `ws://${window.location.hostname}:3001/velocity`
+  : 'wss://macos-sonoma.onrender.com/velocity';
 
 class MultiplayerManager {
   constructor() {
     this.ws = null;
     this.connected = false;
-    this.myTag = this.loadTag();
-    this.peers = new Map(); // tag -> { mesh, position, rotation, lastUpdate }
+    this.myTag = this._loadTag();
+    this.roomId = 'freeroam';
+    this.peers = new Map(); // tag → { mesh, position, rotation, lastUpdate }
     this.scene = null;
-    this.onPeerUpdate = null;
-    this.serverUrl = null;
+    this.onRaceEvent = null; // callback for race events from other players
   }
 
-  loadTag() {
+  _loadTag() {
     let tag = localStorage.getItem('racing_player_tag');
     if (!tag) {
       tag = '#' + Math.random().toString(36).substring(2, 8);
@@ -25,66 +31,73 @@ class MultiplayerManager {
 
   init(scene) {
     this.scene = scene;
-    document.getElementById('myTag').value = this.myTag;
+    const tagEl = document.getElementById('myTag');
+    if (tagEl) tagEl.value = this.myTag;
   }
 
-  connect(serverUrl) {
-    if (this.ws) this.ws.close();
+  connect(roomId = 'freeroam') {
+    if (this.ws) this.disconnect();
+    this.roomId = roomId;
 
-    this.serverUrl = serverUrl || 'ws://localhost:8080';
+    const url = `${WS_SERVER}?tag=${encodeURIComponent(this.myTag)}&room=${encodeURIComponent(roomId)}`;
 
     try {
-      this.ws = new WebSocket(this.serverUrl);
+      this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
         this.connected = true;
-        this.ws.send(JSON.stringify({ type: 'join', tag: this.myTag }));
-        this.showToast('Connected to server');
+        this._showToast(`Connected to ${roomId === 'freeroam' ? 'Free Roam' : 'Race'} server`);
+        this._updateStatus(true);
       };
 
       this.ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          this.handleMessage(msg);
+          this._handleMessage(msg);
         } catch {}
       };
 
       this.ws.onclose = () => {
         this.connected = false;
-        this.showToast('Disconnected from server');
+        this._updateStatus(false);
       };
 
       this.ws.onerror = () => {
-        this.showToast('Could not connect — play offline or start a server');
+        this._showToast('Could not connect — playing offline');
+        this._updateStatus(false);
       };
     } catch {
-      this.showToast('Multiplayer server not available — playing offline');
+      this._showToast('Multiplayer not available — playing offline');
     }
   }
 
-  handleMessage(msg) {
+  _handleMessage(msg) {
     switch (msg.type) {
       case 'peer_join':
-        this.addPeer(msg.tag);
+        this._addPeer(msg.tag);
         break;
 
       case 'peer_leave':
-        this.removePeer(msg.tag);
+        this._removePeer(msg.tag);
         break;
 
       case 'peer_update':
-        this.updatePeer(msg.tag, msg.data);
+        this._updatePeer(msg.tag, msg.data);
         break;
 
       case 'peer_list':
         msg.tags.forEach(tag => {
-          if (tag !== this.myTag) this.addPeer(tag);
+          if (tag !== this.myTag) this._addPeer(tag);
         });
+        break;
+
+      case 'race_event':
+        if (this.onRaceEvent) this.onRaceEvent(msg.tag, msg.event, msg.payload);
         break;
     }
   }
 
-  addPeer(tag) {
+  _addPeer(tag) {
     if (this.peers.has(tag) || tag === this.myTag) return;
 
     const def = CAR_DEFS[Math.floor(Math.random() * CAR_DEFS.length)];
@@ -98,25 +111,26 @@ class MultiplayerManager {
       lastUpdate: performance.now(),
     });
 
-    this.updatePlayerList();
-    this.showToast(`${tag} joined`);
+    this._updatePlayerList();
+    this._showToast(`${tag} joined`);
   }
 
-  removePeer(tag) {
+  _removePeer(tag) {
     const peer = this.peers.get(tag);
     if (peer) {
       if (this.scene) this.scene.remove(peer.mesh);
       this.peers.delete(tag);
-      this.updatePlayerList();
-      this.showToast(`${tag} left`);
+      this._updatePlayerList();
+      this._showToast(`${tag} left`);
     }
   }
 
-  updatePeer(tag, data) {
-    const peer = this.peers.get(tag);
+  _updatePeer(tag, data) {
+    let peer = this.peers.get(tag);
     if (!peer) {
-      this.addPeer(tag);
-      return;
+      this._addPeer(tag);
+      peer = this.peers.get(tag);
+      if (!peer) return;
     }
 
     peer.position.set(data.x, data.y, data.z);
@@ -124,29 +138,32 @@ class MultiplayerManager {
     peer.lastUpdate = performance.now();
   }
 
-  // Send local player state
+  // Send local player state — throttled to ~20 updates/sec
   sendUpdate(position, rotation) {
-    if (!this.connected || !this.ws) return;
+    if (!this.connected || !this.ws || this.ws.readyState !== 1) return;
 
     this.ws.send(JSON.stringify({
       type: 'update',
-      tag: this.myTag,
       data: {
-        x: position.x,
-        y: position.y,
-        z: position.z,
-        r: rotation,
+        x: Math.round(position.x * 10) / 10,
+        y: Math.round(position.y * 10) / 10,
+        z: Math.round(position.z * 10) / 10,
+        r: Math.round(rotation * 100) / 100,
       },
     }));
   }
 
-  // Interpolate peer meshes
+  // Send race events (countdown start, finish, etc.)
+  sendRaceEvent(event, payload = {}) {
+    if (!this.connected || !this.ws || this.ws.readyState !== 1) return;
+    this.ws.send(JSON.stringify({ type: 'race_event', event, payload }));
+  }
+
+  // Interpolate peer meshes toward their target positions
   updateMeshes() {
     const now = performance.now();
-    this.peers.forEach((peer) => {
-      // Lerp position
+    this.peers.forEach((peer, tag) => {
       peer.mesh.position.lerp(peer.position, 0.15);
-      // Lerp rotation
       let diff = peer.rotation - peer.mesh.rotation.y;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
@@ -155,7 +172,6 @@ class MultiplayerManager {
       // Remove stale peers (no update for 10s)
       if (now - peer.lastUpdate > 10000) {
         if (this.scene) this.scene.remove(peer.mesh);
-        // Mark for cleanup
         peer.stale = true;
       }
     });
@@ -166,7 +182,7 @@ class MultiplayerManager {
     }
   }
 
-  updatePlayerList() {
+  _updatePlayerList() {
     const el = document.getElementById('connectedPlayers');
     if (!el) return;
     el.innerHTML = '';
@@ -178,7 +194,15 @@ class MultiplayerManager {
     });
   }
 
-  showToast(msg) {
+  _updateStatus(connected) {
+    const el = document.getElementById('mpStatus');
+    if (el) {
+      el.textContent = connected ? `Online (${this.peers.size + 1} players)` : 'Offline';
+      el.style.color = connected ? '#00ff88' : '#ff4444';
+    }
+  }
+
+  _showToast(msg) {
     const toast = document.createElement('div');
     toast.className = 'toast';
     toast.textContent = msg;
@@ -196,6 +220,7 @@ class MultiplayerManager {
     });
     this.peers.clear();
     this.connected = false;
+    this._updateStatus(false);
   }
 }
 

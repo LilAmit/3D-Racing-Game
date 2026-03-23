@@ -74,6 +74,8 @@
           <option value="circuit">City Circuit</option>
           <option value="highway">Highway Sprint</option>
           <option value="mountain">Mountain Pass</option>
+          <option value="racetrack">Speedway Oval (Race Only)</option>
+          <option value="grandprix">Grand Prix Circuit (Race Only)</option>
         </select>
       </div>
       <div class="form-group">
@@ -120,14 +122,24 @@
         <input type="text" id="myTag" readonly />
       </div>
       <div class="form-group">
-        <label>Friend's Tag</label>
-        <input type="text" id="friendTag" placeholder="#abc123" />
+        <label>Room</label>
+        <select id="roomSelect">
+          <option value="freeroam">Free Roam</option>
+          <option value="race_circuit">Race — City Circuit</option>
+          <option value="race_highway">Race — Highway Sprint</option>
+          <option value="race_racetrack">Race — Speedway Oval</option>
+          <option value="race_grandprix">Race — Grand Prix</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <span id="mpStatus" style="color: #ff4444;">Offline</span>
       </div>
       <button class="menu-btn primary" id="btnConnect">Connect</button>
       <div id="connectedPlayers"></div>
       <div class="btn-row">
         <button class="menu-btn" id="btnBackFromMP">Back</button>
-        <button class="menu-btn primary" id="btnStartMP">Start Together</button>
+        <button class="menu-btn primary" id="btnStartMP">Play Online</button>
       </div>
     </div>
   </div>
@@ -155,7 +167,7 @@
           </div>
           <div class="form-group">
             <label>Draw Distance</label>
-            <input type="range" id="setDrawDist" min="200" max="1200" step="50" value="800" />
+            <input type="range" id="setDrawDist" min="200" max="2000" step="50" value="1200" />
             <span id="drawDistVal">500</span>
           </div>
         </div>

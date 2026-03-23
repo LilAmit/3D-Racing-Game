@@ -1,4 +1,4 @@
-// Audio manager — procedural engine sounds + music
+// Audio manager — realistic multi-cylinder engine + procedural SFX + music
 
 import { settings } from './settings.js';
 
@@ -6,15 +6,22 @@ class AudioManager {
   constructor() {
     this.ctx = null;
     this.initialized = false;
-    this.engineNode = null;
+    this.masterGain = null;
     this.engineGain = null;
     this.musicGain = null;
     this.sfxGain = null;
-    this.masterGain = null;
     this.musicPlaying = false;
-    this.currentMusicSource = null;
-    this.musicNotes = [];
     this.musicTimer = null;
+
+    // Engine nodes
+    this._engineCylinders = [];
+    this._engineLPF = null;
+    this._engineHPF = null;
+    this._exhaustGain = null;
+    this._intakeGain = null;
+    this._rumbleNode = null;
+    this._rumbleGain = null;
+    this._prevSpeedNorm = 0;
   }
 
   init() {
@@ -36,32 +43,104 @@ class AudioManager {
     this.musicGain.connect(this.masterGain);
     this.musicGain.gain.value = settings.get('musicVolume');
 
-    // Create engine oscillator
-    this.engineOsc = this.ctx.createOscillator();
-    this.engineOsc.type = 'sawtooth';
-    this.engineOsc.frequency.value = 60;
-
-    const engineFilter = this.ctx.createBiquadFilter();
-    engineFilter.type = 'lowpass';
-    engineFilter.frequency.value = 400;
-    this.engineFilter = engineFilter;
-
-    this.engineOsc.connect(engineFilter);
-    engineFilter.connect(this.engineGain);
-    this.engineOsc.start();
-
-    // Sub-bass for engine rumble
-    this.engineSub = this.ctx.createOscillator();
-    this.engineSub.type = 'sine';
-    this.engineSub.frequency.value = 30;
-    const subGain = this.ctx.createGain();
-    subGain.gain.value = 0.3;
-    this.engineSub.connect(subGain);
-    subGain.connect(this.engineGain);
-    this.engineSub.start();
-    this.engineSubNode = this.engineSub;
-
+    this._buildEngine();
     this.initialized = true;
+  }
+
+  _buildEngine() {
+    const ctx = this.ctx;
+
+    // === Realistic multi-cylinder engine ===
+    // We layer several oscillators to simulate a V8-style engine:
+    // 1. Primary firing frequency (sawtooth — gives the "putt putt" character)
+    // 2. Second harmonic (adds body)
+    // 3. Sub-bass rumble (gives chest-thumping low end)
+    // 4. Intake whoosh (noise filtered to mid-high range)
+    // 5. Exhaust crackle (noise shaped by envelope)
+
+    // Exhaust bus with distortion-like waveshaping
+    const exhaust = ctx.createGain();
+    exhaust.gain.value = 0.35;
+    const exhaustFilter = ctx.createBiquadFilter();
+    exhaustFilter.type = 'lowpass';
+    exhaustFilter.frequency.value = 800;
+    exhaustFilter.Q.value = 2;
+    exhaust.connect(exhaustFilter);
+    exhaustFilter.connect(this.engineGain);
+    this._exhaustGain = exhaust;
+    this._engineLPF = exhaustFilter;
+
+    // Cylinder 1 — primary firing (sawtooth for harsh harmonics)
+    const cyl1 = ctx.createOscillator();
+    cyl1.type = 'sawtooth';
+    cyl1.frequency.value = 35; // idle ~35 Hz for a V8
+    const cyl1Gain = ctx.createGain();
+    cyl1Gain.gain.value = 0.18;
+    cyl1.connect(cyl1Gain);
+    cyl1Gain.connect(exhaust);
+    cyl1.start();
+    this._engineCylinders.push({ osc: cyl1, gain: cyl1Gain, freqMult: 1.0 });
+
+    // Cylinder 2 — second harmonic (triangle, smoother)
+    const cyl2 = ctx.createOscillator();
+    cyl2.type = 'triangle';
+    cyl2.frequency.value = 70;
+    const cyl2Gain = ctx.createGain();
+    cyl2Gain.gain.value = 0.10;
+    cyl2.connect(cyl2Gain);
+    cyl2Gain.connect(exhaust);
+    cyl2.start();
+    this._engineCylinders.push({ osc: cyl2, gain: cyl2Gain, freqMult: 2.0 });
+
+    // Cylinder 3 — third harmonic for bite
+    const cyl3 = ctx.createOscillator();
+    cyl3.type = 'square';
+    cyl3.frequency.value = 105;
+    const cyl3Gain = ctx.createGain();
+    cyl3Gain.gain.value = 0.04;
+    cyl3.connect(cyl3Gain);
+    cyl3Gain.connect(exhaust);
+    cyl3.start();
+    this._engineCylinders.push({ osc: cyl3, gain: cyl3Gain, freqMult: 3.0 });
+
+    // Sub-bass rumble
+    const rumble = ctx.createOscillator();
+    rumble.type = 'sine';
+    rumble.frequency.value = 18;
+    const rumbleGain = ctx.createGain();
+    rumbleGain.gain.value = 0.20;
+    rumble.connect(rumbleGain);
+    rumbleGain.connect(this.engineGain);
+    rumble.start();
+    this._rumbleNode = rumble;
+    this._rumbleGain = rumbleGain;
+
+    // Intake noise (air being sucked in at high RPM)
+    const intakeBuffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const intakeData = intakeBuffer.getChannelData(0);
+    for (let i = 0; i < intakeData.length; i++) {
+      intakeData[i] = (Math.random() * 2 - 1) * 0.5;
+    }
+    this._intakeSource = ctx.createBufferSource();
+    this._intakeSource.buffer = intakeBuffer;
+    this._intakeSource.loop = true;
+    const intakeFilter = ctx.createBiquadFilter();
+    intakeFilter.type = 'bandpass';
+    intakeFilter.frequency.value = 2000;
+    intakeFilter.Q.value = 1.5;
+    this._intakeFilter = intakeFilter;
+    const intakeGain = ctx.createGain();
+    intakeGain.gain.value = 0;
+    this._intakeSource.connect(intakeFilter);
+    intakeFilter.connect(intakeGain);
+    intakeGain.connect(this.engineGain);
+    this._intakeSource.start();
+    this._intakeGain = intakeGain;
+
+    // High-pass on whole engine to cut muddy low end
+    this._engineHPF = ctx.createBiquadFilter();
+    this._engineHPF.type = 'highpass';
+    this._engineHPF.frequency.value = 30;
   }
 
   updateVolumes() {
@@ -71,33 +150,82 @@ class AudioManager {
     this.sfxGain.gain.value = settings.get('sfxVolume');
   }
 
-  // Update engine sound based on speed (0-1 normalized) and throttle
+  // Update engine sound — speedNorm 0-1, throttle 0-1
   updateEngine(speedNorm, throttle) {
     if (!this.initialized) return;
-    const baseFreq = 55 + speedNorm * 180;
-    const vol = 0.05 + throttle * 0.25 + speedNorm * 0.15;
     const t = this.ctx.currentTime;
 
-    this.engineOsc.frequency.setTargetAtTime(baseFreq, t, 0.1);
-    this.engineSubNode.frequency.setTargetAtTime(25 + speedNorm * 40, t, 0.1);
-    this.engineGain.gain.setTargetAtTime(Math.min(vol, 0.5), t, 0.05);
-    this.engineFilter.frequency.setTargetAtTime(300 + speedNorm * 1200 + throttle * 600, t, 0.1);
+    // Base firing frequency: idle 35 Hz → redline ~120 Hz
+    const baseFreq = 35 + speedNorm * 85;
+
+    // Update each cylinder harmonic
+    this._engineCylinders.forEach(cyl => {
+      cyl.osc.frequency.setTargetAtTime(baseFreq * cyl.freqMult, t, 0.08);
+    });
+
+    // Sub rumble follows at half frequency
+    this._rumbleNode.frequency.setTargetAtTime(baseFreq * 0.5, t, 0.08);
+
+    // Volume envelope — louder with throttle, moderate at cruise
+    const idleVol = 0.06;
+    const throttleVol = throttle * 0.25;
+    const speedVol = speedNorm * 0.12;
+    const totalVol = Math.min(idleVol + throttleVol + speedVol, 0.45);
+    this.engineGain.gain.setTargetAtTime(totalVol, t, 0.04);
+
+    // Exhaust filter opens up at high RPM (more high-freq harmonics = louder/raspier)
+    const filterFreq = 600 + speedNorm * 2500 + throttle * 1000;
+    this._engineLPF.frequency.setTargetAtTime(filterFreq, t, 0.08);
+
+    // Intake whoosh increases at high RPM + throttle
+    const intakeVol = Math.max(0, (speedNorm - 0.3) * 0.15 + throttle * 0.06);
+    this._intakeGain.gain.setTargetAtTime(intakeVol, t, 0.06);
+    this._intakeFilter.frequency.setTargetAtTime(1500 + speedNorm * 3000, t, 0.1);
+
+    // Sub-bass rumble — prominent at idle, fades at speed
+    const rumbleVol = 0.2 - speedNorm * 0.12;
+    this._rumbleGain.gain.setTargetAtTime(Math.max(0.04, rumbleVol), t, 0.1);
+
+    this._prevSpeedNorm = speedNorm;
   }
 
-  // Nitro whoosh
+  // Nitro whoosh — deeper and more dramatic
   playNitro() {
     if (!this.initialized) return;
     const osc = this.ctx.createOscillator();
-    osc.type = 'sine';
+    osc.type = 'sawtooth';
     const g = this.ctx.createGain();
-    osc.frequency.value = 200;
-    g.gain.value = 0.3;
-    osc.connect(g);
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = 300;
+    f.Q.value = 1;
+    osc.frequency.value = 120;
+    g.gain.value = 0.2;
+    osc.connect(f);
+    f.connect(g);
     g.connect(this.sfxGain);
     osc.start();
-    osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.3);
-    g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
-    osc.stop(this.ctx.currentTime + 0.5);
+    osc.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 0.4);
+    g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.6);
+    osc.stop(this.ctx.currentTime + 0.6);
+
+    // Whoosh layer
+    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.5, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (data.length * 0.4));
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const hpf = this.ctx.createBiquadFilter();
+    hpf.type = 'highpass';
+    hpf.frequency.value = 2000;
+    const ng = this.ctx.createGain();
+    ng.gain.value = 0.1;
+    src.connect(hpf);
+    hpf.connect(ng);
+    ng.connect(this.sfxGain);
+    src.start();
   }
 
   // Collision thud
@@ -121,7 +249,7 @@ class AudioManager {
     src.start();
   }
 
-  // Coin pickup
+  // Coin pickup — satisfying ding
   playCoinPickup() {
     if (!this.initialized) return;
     const osc = this.ctx.createOscillator();
@@ -172,7 +300,7 @@ class AudioManager {
     osc.stop(this.ctx.currentTime + (final ? 0.5 : 0.2));
   }
 
-  // Horn
+  // Horn — dual-tone car horn
   playHorn() {
     if (!this.initialized) return;
     const osc1 = this.ctx.createOscillator();
@@ -215,12 +343,11 @@ class AudioManager {
     src.start();
   }
 
-  // Background music — procedural synth loop
+  // Background music — electronic racing theme
   startMusic() {
     if (!this.initialized || this.musicPlaying) return;
     this.musicPlaying = true;
 
-    // Simple chord progression: Am - F - C - G
     const chords = [
       [220, 261.63, 329.63],   // Am
       [174.61, 220, 261.63],   // F
@@ -248,7 +375,6 @@ class AudioManager {
         osc.stop(t + 2);
       });
 
-      // Bassline
       const bass = this.ctx.createOscillator();
       bass.type = 'sine';
       bass.frequency.value = chord[0] / 2;
@@ -262,10 +388,8 @@ class AudioManager {
       bass.start(t);
       bass.stop(t + 2);
 
-      // Simple beat
       for (let b = 0; b < 4; b++) {
         const beatTime = t + b * 0.5;
-        // Kick
         const kickOsc = this.ctx.createOscillator();
         kickOsc.type = 'sine';
         kickOsc.frequency.value = 150;
@@ -278,7 +402,6 @@ class AudioManager {
         kickOsc.start(beatTime);
         kickOsc.stop(beatTime + 0.15);
 
-        // Hi-hat on off-beats
         if (b % 2 === 1) {
           const hat = this.ctx.createBufferSource();
           const hatBuf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.05, this.ctx.sampleRate);

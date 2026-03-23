@@ -2,29 +2,48 @@
 
 import * as THREE from 'three';
 
-const WORLD_SIZE = 1600;
-const ROAD_WIDTH = 14;
+const WORLD_SIZE = 3200;
+const ROAD_WIDTH = 16;
 
 const ROADS = [
+  // Main cross roads
   { points: [[-WORLD_SIZE / 2, 0], [WORLD_SIZE / 2, 0]], width: ROAD_WIDTH },
   { points: [[0, -WORLD_SIZE / 2], [0, WORLD_SIZE / 2]], width: ROAD_WIDTH },
-  { points: [[-500, -500], [500, 500]], width: ROAD_WIDTH * 0.8 },
-  { points: [[-500, 500], [500, -500]], width: ROAD_WIDTH * 0.8 },
+  // Diagonals
+  { points: [[-1000, -1000], [1000, 1000]], width: ROAD_WIDTH * 0.8 },
+  { points: [[-1000, 1000], [1000, -1000]], width: ROAD_WIDTH * 0.8 },
+  // Inner loop
   { points: [[-200, -200], [200, -200], [200, 200], [-200, 200], [-200, -200]], width: ROAD_WIDTH, loop: true },
-  { points: [[-400, -400], [400, -400], [400, 400], [-400, 400], [-400, -400]], width: ROAD_WIDTH * 0.85, loop: true },
-  { points: [[-650, -650], [650, -650], [650, 650], [-650, 650], [-650, -650]], width: ROAD_WIDTH * 0.7, loop: true },
+  // Mid loop
+  { points: [[-500, -500], [500, -500], [500, 500], [-500, 500], [-500, -500]], width: ROAD_WIDTH * 0.9, loop: true },
+  // Outer loop
+  { points: [[-900, -900], [900, -900], [900, 900], [-900, 900], [-900, -900]], width: ROAD_WIDTH * 0.8, loop: true },
+  // Far outer loop
+  { points: [[-1300, -1300], [1300, -1300], [1300, 1300], [-1300, 1300], [-1300, -1300]], width: ROAD_WIDTH * 0.7, loop: true },
+  // Inner grid roads
   { points: [[-300, -150], [300, -150]], width: 10 },
   { points: [[-300, 150], [300, 150]], width: 10 },
   { points: [[-150, -300], [-150, 300]], width: 10 },
   { points: [[150, -300], [150, 300]], width: 10 },
-  { points: [[-700, -300], [-400, -400]], width: ROAD_WIDTH },
-  { points: [[400, -400], [700, -300]], width: ROAD_WIDTH },
-  { points: [[400, 400], [700, 300]], width: ROAD_WIDTH },
-  { points: [[-400, 400], [-700, 300]], width: ROAD_WIDTH },
-  { points: [[-700, 0], [-700, -600]], width: 10 },
-  { points: [[700, 0], [700, 600]], width: 10 },
-  { points: [[500, -200], [600, -300], [550, -450], [650, -550]], width: 9 },
-  { points: [[-500, 200], [-600, 300], [-550, 450], [-650, 550]], width: 9 },
+  // Connector roads
+  { points: [[-900, -400], [-500, -500]], width: ROAD_WIDTH },
+  { points: [[500, -500], [900, -400]], width: ROAD_WIDTH },
+  { points: [[500, 500], [900, 400]], width: ROAD_WIDTH },
+  { points: [[-500, 500], [-900, 400]], width: ROAD_WIDTH },
+  // Outer straight roads
+  { points: [[-1100, 0], [-1100, -900]], width: 10 },
+  { points: [[1100, 0], [1100, 900]], width: 10 },
+  // Winding roads
+  { points: [[700, -300], [850, -450], [750, -650], [900, -800]], width: 10 },
+  { points: [[-700, 300], [-850, 450], [-750, 650], [-900, 800]], width: 10 },
+  // Extra ring roads
+  { points: [[-600, 0], [-500, -300], [-200, -500], [200, -500], [500, -300], [600, 0]], width: 10 },
+  { points: [[600, 0], [500, 300], [200, 500], [-200, 500], [-500, 300], [-600, 0]], width: 10 },
+  // Far connector roads
+  { points: [[900, 0], [1300, 0]], width: 10 },
+  { points: [[-900, 0], [-1300, 0]], width: 10 },
+  { points: [[0, 900], [0, 1300]], width: 10 },
+  { points: [[0, -900], [0, -1300]], width: 10 },
 ];
 
 export const TRACKS = {
@@ -43,10 +62,10 @@ export const TRACKS = {
     name: 'Highway Sprint',
     checkpoints: [
       { x: 200, z: 0, radius: 18 },
-      { x: 400, z: -200, radius: 20 },
-      { x: 400, z: -400, radius: 20 },
-      { x: 200, z: -400, radius: 20 },
-      { x: 0, z: -400, radius: 20 },
+      { x: 500, z: -300, radius: 20 },
+      { x: 500, z: -500, radius: 20 },
+      { x: 200, z: -500, radius: 20 },
+      { x: 0, z: -500, radius: 20 },
       { x: -200, z: -200, radius: 18 },
       { x: -200, z: 0, radius: 18 },
     ],
@@ -57,10 +76,10 @@ export const TRACKS = {
     name: 'Mountain Pass',
     checkpoints: [
       { x: -200, z: -150, radius: 18 },
-      { x: -400, z: -400, radius: 22 },
-      { x: -100, z: -400, radius: 22 },
+      { x: -500, z: -500, radius: 22 },
+      { x: -100, z: -500, radius: 22 },
       { x: 150, z: -300, radius: 18 },
-      { x: 400, z: -150, radius: 22 },
+      { x: 500, z: -150, radius: 22 },
       { x: 300, z: 150, radius: 18 },
       { x: 0, z: 200, radius: 18 },
       { x: -200, z: 100, radius: 18 },
@@ -68,12 +87,43 @@ export const TRACKS = {
     startPos: { x: -200, z: 0 },
     startAngle: -Math.PI / 2,
   },
+  // Dedicated race-only oval track
+  racetrack: {
+    name: 'Speedway Oval',
+    checkpoints: [
+      { x: 400, z: 0, radius: 25 },
+      { x: 200, z: -350, radius: 25 },
+      { x: -200, z: -350, radius: 25 },
+      { x: -400, z: 0, radius: 25 },
+      { x: -200, z: 350, radius: 25 },
+      { x: 200, z: 350, radius: 25 },
+    ],
+    startPos: { x: 350, z: 50 },
+    startAngle: -Math.PI / 2,
+    dedicated: true, // flag: this track has its own built geometry
+  },
+  grandprix: {
+    name: 'Grand Prix Circuit',
+    checkpoints: [
+      { x: 500, z: 0, radius: 22 },
+      { x: 700, z: -400, radius: 22 },
+      { x: 300, z: -700, radius: 22 },
+      { x: -200, z: -600, radius: 22 },
+      { x: -600, z: -300, radius: 22 },
+      { x: -600, z: 200, radius: 22 },
+      { x: -200, z: 500, radius: 22 },
+      { x: 300, z: 400, radius: 22 },
+    ],
+    startPos: { x: 400, z: 100 },
+    startAngle: 0,
+    dedicated: true,
+  },
 };
 
 export const SPAWN_POS = { x: 30, z: 0 };
 export const SPAWN_ANGLE = 0;
 
-function isOnRoad(px, pz, margin = 12) {
+function isOnRoad(px, pz, margin = 14) {
   for (const road of ROADS) {
     for (let i = 0; i < road.points.length - 1; i++) {
       const [x1, z1] = road.points[i];
@@ -91,6 +141,68 @@ function isOnRoad(px, pz, margin = 12) {
   return false;
 }
 
+// Build a gold coin mesh with dollar sign
+function buildCoinMesh() {
+  const group = new THREE.Group();
+
+  // Coin body — cylinder
+  const coinGeo = new THREE.CylinderGeometry(0.7, 0.7, 0.12, 32);
+  const coinMat = new THREE.MeshStandardMaterial({
+    color: 0xffd700,
+    emissive: 0xcc8800,
+    emissiveIntensity: 0.3,
+    metalness: 0.95,
+    roughness: 0.15,
+  });
+  const coinBody = new THREE.Mesh(coinGeo, coinMat);
+  group.add(coinBody);
+
+  // Rim ring
+  const rimGeo = new THREE.TorusGeometry(0.7, 0.04, 8, 32);
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0xdaa520, metalness: 0.9, roughness: 0.2 });
+  const rim = new THREE.Mesh(rimGeo, rimMat);
+  rim.rotation.x = Math.PI / 2;
+  group.add(rim);
+
+  // Dollar sign — built from thin boxes
+  const signMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, metalness: 0.7, roughness: 0.3 });
+
+  // S shape — approximate with 3 curved segments using boxes
+  // Top curve
+  const s1 = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.02, 0.08), signMat);
+  s1.position.set(0.02, 0.07, 0.16);
+  group.add(s1);
+  const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.14), signMat);
+  s2.position.set(-0.12, 0.07, 0.1);
+  group.add(s2);
+  // Middle bar
+  const s3 = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.02, 0.08), signMat);
+  s3.position.set(0, 0.07, 0.0);
+  group.add(s3);
+  // Bottom curve
+  const s4 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.14), signMat);
+  s4.position.set(0.12, 0.07, -0.08);
+  group.add(s4);
+  const s5 = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.02, 0.08), signMat);
+  s5.position.set(-0.02, 0.07, -0.16);
+  group.add(s5);
+  // Vertical line through S
+  const sLine = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.02, 0.48), signMat);
+  sLine.position.set(0, 0.07, 0);
+  group.add(sLine);
+
+  // Duplicate dollar sign on other side
+  [s1, s2, s3, s4, s5, sLine].forEach(m => {
+    const clone = m.clone();
+    clone.position.y = -0.07;
+    group.add(clone);
+  });
+
+  // The coin rotates on Z axis (standing upright, spinning)
+  group.rotation.x = Math.PI / 2;
+  return group;
+}
+
 export class World {
   constructor(scene) {
     this.scene = scene;
@@ -99,6 +211,7 @@ export class World {
     this.coins = [];
     this.ramps = [];
     this.checkpointMeshes = [];
+    this.raceTrackMeshes = [];
     this.sun = null;
     this.colliders = [];
 
@@ -109,20 +222,13 @@ export class World {
   _build() {
     const scene = this.scene;
 
-    // ── Ground ──
-    const groundGeo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 128, 128);
-    const posAttr = groundGeo.attributes.position;
-    for (let i = 0; i < posAttr.count; i++) {
-      const x = posAttr.getX(i);
-      const y = posAttr.getY(i);
-      const distFromCenter = Math.sqrt(x * x + y * y);
-      const flatZone = Math.min(1, distFromCenter / 300);
-      const height = (Math.sin(x * 0.006) * 4 + Math.cos(y * 0.008) * 3 + Math.sin(x * 0.015 + y * 0.015) * 2) * flatZone;
-      posAttr.setZ(i, height);
-    }
-    groundGeo.computeVertexNormals();
-    const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color: 0x3a7d3a, roughness: 0.9, flatShading: true }));
+    // ── Ground — FLAT plane, below road level so grass never covers roads ──
+    const groundGeo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 1, 1);
+    const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({
+      color: 0x3a7d3a, roughness: 0.9,
+    }));
     ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.1; // Grass sits BELOW road surface (y=0.05)
     ground.receiveShadow = true;
     scene.add(ground);
 
@@ -167,22 +273,43 @@ export class World {
       }
     });
 
+    // ── Road intersections — fill in corners so no grass peeks through ──
+    const intersectionMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.75 });
+    // Cover major intersection areas
+    const intersections = [
+      { x: 0, z: 0, size: 20 },
+      { x: 200, z: -200, size: 18 }, { x: -200, z: -200, size: 18 },
+      { x: 200, z: 200, size: 18 }, { x: -200, z: 200, size: 18 },
+      { x: 500, z: -500, size: 18 }, { x: -500, z: -500, size: 18 },
+      { x: 500, z: 500, size: 18 }, { x: -500, z: 500, size: 18 },
+      { x: 900, z: -900, size: 16 }, { x: -900, z: -900, size: 16 },
+      { x: 900, z: 900, size: 16 }, { x: -900, z: 900, size: 16 },
+      { x: 900, z: 0, size: 14 }, { x: -900, z: 0, size: 14 },
+      { x: 0, z: 900, size: 14 }, { x: 0, z: -900, size: 14 },
+    ];
+    intersections.forEach(({ x, z, size }) => {
+      const patch = new THREE.Mesh(new THREE.PlaneGeometry(size, size), intersectionMat);
+      patch.rotation.x = -Math.PI / 2;
+      patch.position.set(x, 0.051, z);
+      scene.add(patch);
+    });
+
     // ── Buildings ──
     const buildingColors = [0x8899aa, 0x99aabb, 0x778899, 0x667788, 0xaabbcc, 0x556677, 0x889988, 0x998877];
     const windowMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffff88, emissiveIntensity: 0.15 });
     const buildingPositions = [];
 
-    for (let bx = -8; bx <= 8; bx++) {
-      for (let bz = -8; bz <= 8; bz++) {
+    for (let bx = -16; bx <= 16; bx++) {
+      for (let bz = -16; bz <= 16; bz++) {
         const dist = Math.sqrt(bx * bx + bz * bz);
-        if (dist > 7 && Math.random() > 0.4) continue;
+        if (dist > 14 && Math.random() > 0.4) continue;
         const cx = bx * 80 + (Math.random() - 0.5) * 35;
         const cz = bz * 80 + (Math.random() - 0.5) * 35;
         if (Math.abs(cx) < 25 && Math.abs(cz) < 25) continue;
         if (isOnRoad(cx, cz, 14)) continue;
 
         const distFromCenter = Math.sqrt(cx * cx + cz * cz);
-        const maxH = distFromCenter < 300 ? 50 : (distFromCenter < 500 ? 35 : 20);
+        const maxH = distFromCenter < 300 ? 50 : (distFromCenter < 600 ? 35 : 20);
         const w = 8 + Math.random() * 14;
         const h = 8 + Math.random() * maxH;
         const d = 8 + Math.random() * 14;
@@ -223,10 +350,10 @@ export class World {
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x664422 });
     const leafColors = [0x228833, 0x33aa44, 0x44bb55, 0x227722, 0x1a6625];
 
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < 700; i++) {
       const tx = (Math.random() - 0.5) * WORLD_SIZE * 0.92;
       const tz = (Math.random() - 0.5) * WORLD_SIZE * 0.92;
-      if (isOnRoad(tx, tz, 8)) continue;
+      if (isOnRoad(tx, tz, 10)) continue;
       if (Math.abs(tx) < 20 && Math.abs(tz) < 20) continue;
       let nearBuilding = false;
       for (const b of buildingPositions) {
@@ -250,7 +377,7 @@ export class World {
       leaves.position.y = trunkH + leafSize * 0.4;
       leaves.castShadow = true;
       treeGroup.add(leaves);
-      treeGroup.position.set(tx, 0, tz);
+      treeGroup.position.set(tx, -0.1, tz); // Trees sit on the grass level
       scene.add(treeGroup);
       this.trees.push({ mesh: treeGroup, x: tx, z: tz, radius: leafSize });
     }
@@ -268,6 +395,10 @@ export class World {
       { x: 0, z: -250, rotY: -Math.PI / 2 },
       { x: 500, z: 0, rotY: 0 },
       { x: -500, z: 0, rotY: Math.PI },
+      { x: 0, z: 500, rotY: Math.PI / 2 },
+      { x: 0, z: -500, rotY: -Math.PI / 2 },
+      { x: 900, z: 0, rotY: 0 },
+      { x: -900, z: 0, rotY: Math.PI },
     ];
 
     rampPositions.forEach(rp => {
@@ -309,10 +440,10 @@ export class World {
     // ── Street lights ──
     const lightBulbMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffcc, emissiveIntensity: 1 });
     const poleMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
-    for (let i = -700; i <= 700; i += 40) {
-      [{ x: i, z: 9 }, { x: i, z: -9 }, { x: 9, z: i }, { x: -9, z: i }].forEach(pos => {
+    for (let i = -1400; i <= 1400; i += 50) {
+      [{ x: i, z: 10 }, { x: i, z: -10 }, { x: 10, z: i }, { x: -10, z: i }].forEach(pos => {
         if (Math.abs(pos.x) < 15 && Math.abs(pos.z) < 15) return;
-        if (Math.abs(pos.x) > 700 || Math.abs(pos.z) > 700) return;
+        if (Math.abs(pos.x) > 1400 || Math.abs(pos.z) > 1400) return;
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 7, 4), poleMat);
         pole.position.set(pos.x, 3.5, pos.z);
         scene.add(pole);
@@ -322,13 +453,10 @@ export class World {
       });
     }
 
-    // ── Coins ──
-    const coinMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffa500, emissiveIntensity: 0.4, metalness: 0.9 });
-    const coinGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.12, 16);
-
-    for (let i = 0; i < 200; i++) {
+    // ── Coins — gold round coins with $ sign ──
+    for (let i = 0; i < 350; i++) {
       let cx, cz;
-      if (i < 120) {
+      if (i < 200) {
         const road = ROADS[Math.floor(Math.random() * ROADS.length)];
         const segIdx = Math.floor(Math.random() * (road.points.length - 1));
         const t = Math.random();
@@ -340,9 +468,8 @@ export class World {
         cx = (Math.random() - 0.5) * WORLD_SIZE * 0.85;
         cz = (Math.random() - 0.5) * WORLD_SIZE * 0.85;
       }
-      const coin = new THREE.Mesh(coinGeo, coinMat);
+      const coin = buildCoinMesh();
       coin.position.set(cx, 1.5, cz);
-      coin.rotation.x = Math.PI / 2;
       coin.userData.collected = false;
       scene.add(coin);
       this.coins.push(coin);
@@ -365,7 +492,7 @@ export class World {
     scene.add(this.sun);
 
     scene.add(new THREE.HemisphereLight(0x88bbff, 0x445522, 0.5));
-    scene.fog = new THREE.Fog(0x88bbdd, 300, 800);
+    scene.fog = new THREE.Fog(0x88bbdd, 500, 1500);
     scene.background = new THREE.Color(0x88bbdd);
   }
 
@@ -385,6 +512,102 @@ export class World {
       this.sun.target.position.copy(playerPos);
       this.sun.target.updateMatrixWorld();
     }
+  }
+
+  // Build dedicated race track geometry
+  buildRaceTrack(trackId) {
+    this.removeRaceTrack();
+    const track = TRACKS[trackId];
+    if (!track || !track.dedicated) return;
+
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
+    const barrierMat = new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff0000, emissiveIntensity: 0.2 });
+    const whiteBarrierMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
+    const cps = track.checkpoints;
+    const trackWidth = 24;
+
+    // Build road segments between checkpoints in a loop
+    for (let i = 0; i < cps.length; i++) {
+      const a = cps[i];
+      const b = cps[(i + 1) % cps.length];
+      const dx = b.x - a.x, dz = b.z - a.z;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      const angle = Math.atan2(dx, dz);
+
+      // Road surface
+      const road = new THREE.Mesh(new THREE.PlaneGeometry(trackWidth, len + trackWidth), roadMat);
+      road.rotation.x = -Math.PI / 2;
+      road.rotation.z = -angle;
+      road.position.set((a.x + b.x) / 2, 0.06, (a.z + b.z) / 2);
+      road.receiveShadow = true;
+      this.scene.add(road);
+      this.raceTrackMeshes.push(road);
+
+      // Barriers
+      [-1, 1].forEach(side => {
+        const barrier = new THREE.Mesh(
+          new THREE.BoxGeometry(0.5, 1.2, len + trackWidth),
+          (Math.floor(i + (side > 0 ? 0 : 1)) % 2 === 0) ? barrierMat : whiteBarrierMat
+        );
+        const perpX = -Math.sin(angle + Math.PI / 2) * (trackWidth / 2);
+        const perpZ = -Math.cos(angle + Math.PI / 2) * (trackWidth / 2);
+        barrier.position.set(
+          (a.x + b.x) / 2 + perpX * side,
+          0.6,
+          (a.z + b.z) / 2 + perpZ * side
+        );
+        barrier.rotation.y = angle;
+        this.scene.add(barrier);
+        this.raceTrackMeshes.push(barrier);
+
+        // Add as collider
+        this.colliders.push({
+          x: barrier.position.x,
+          z: barrier.position.z,
+          hw: 0.5,
+          hd: (len + trackWidth) / 2,
+          type: 'box',
+          raceTrack: true, // flag for cleanup
+        });
+      });
+    }
+
+    // Start/finish line
+    const startLine = new THREE.Mesh(
+      new THREE.PlaneGeometry(trackWidth, 2),
+      new THREE.MeshStandardMaterial({ color: 0xffffff })
+    );
+    startLine.rotation.x = -Math.PI / 2;
+    const sa = cps[0], sb = cps[1];
+    const sAngle = Math.atan2(sb.x - sa.x, sb.z - sa.z);
+    startLine.rotation.z = -sAngle;
+    startLine.position.set(sa.x, 0.07, sa.z);
+    this.scene.add(startLine);
+    this.raceTrackMeshes.push(startLine);
+
+    // Checkerboard pattern on start line
+    const checkerMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    for (let c = 0; c < 8; c++) {
+      if (c % 2 === 0) {
+        const sq = new THREE.Mesh(new THREE.PlaneGeometry(trackWidth / 8, 1), checkerMat);
+        sq.rotation.x = -Math.PI / 2;
+        sq.rotation.z = -sAngle;
+        const offset = (c - 3.5) * (trackWidth / 8);
+        sq.position.set(
+          sa.x + Math.cos(sAngle) * offset,
+          0.071,
+          sa.z - Math.sin(sAngle) * offset
+        );
+        this.scene.add(sq);
+        this.raceTrackMeshes.push(sq);
+      }
+    }
+  }
+
+  removeRaceTrack() {
+    this.raceTrackMeshes.forEach(m => this.scene.remove(m));
+    this.raceTrackMeshes = [];
+    this.colliders = this.colliders.filter(c => !c.raceTrack);
   }
 
   addCheckpoints(track) {
@@ -409,11 +632,12 @@ export class World {
 
   getRoadsData() {
     return [
-      [[-800, 0], [800, 0]],
-      [[0, -800], [0, 800]],
+      [[-1600, 0], [1600, 0]],
+      [[0, -1600], [0, 1600]],
       [[-200, -200], [200, -200], [200, 200], [-200, 200], [-200, -200]],
-      [[-400, -400], [400, -400], [400, 400], [-400, 400], [-400, -400]],
-      [[-650, -650], [650, -650], [650, 650], [-650, 650], [-650, -650]],
+      [[-500, -500], [500, -500], [500, 500], [-500, 500], [-500, -500]],
+      [[-900, -900], [900, -900], [900, 900], [-900, 900], [-900, -900]],
+      [[-1300, -1300], [1300, -1300], [1300, 1300], [-1300, 1300], [-1300, -1300]],
     ];
   }
 }

@@ -18,6 +18,8 @@ let lookingBack = false;
 let coinTimer = 0;
 const COIN_INTERVAL = 25;
 let minimapCtx;
+let mpSendTimer = 0;
+const MP_SEND_RATE = 0.05; // send position every 50ms (20 Hz)
 
 // ─── Init ───
 function init() {
@@ -31,7 +33,7 @@ function init() {
   // Spawn player car
   spawnPlayerCar();
 
-  // Multiplayer
+  // Multiplayer — init scene ref
   multiplayer.init(engine.scene);
 
   // Minimap
@@ -134,7 +136,8 @@ function setupMenuEvents() {
     hide('multiplayerMenu'); show('mainMenu'); state = 'menu';
   });
   document.getElementById('btnConnect').addEventListener('click', () => {
-    multiplayer.connect('ws://localhost:8080');
+    const roomId = document.getElementById('roomSelect').value || 'freeroam';
+    multiplayer.connect(roomId);
   });
   document.getElementById('btnStartMP').addEventListener('click', () => {
     hide('multiplayerMenu'); startPlaying();
@@ -183,6 +186,11 @@ function startPlaying() {
   audio.init();
   audio.startMusic();
   input.requestPointerLock();
+
+  // Auto-connect multiplayer for free roam
+  if (!multiplayer.connected) {
+    multiplayer.connect('freeroam');
+  }
 }
 
 function startRace() {
@@ -191,6 +199,11 @@ function startRace() {
   spawnPlayerCar();
   audio.init();
   audio.startMusic();
+
+  // Connect to race room if multiplayer is active
+  if (multiplayer.connected) {
+    multiplayer.connect('race_' + raceManager.trackId);
+  }
 
   raceManager.startCountdown(engine.scene, world, playerCar, () => {
     state = 'playing';
@@ -246,10 +259,10 @@ function gameLoop(dt) {
     // HUD
     updateHUD(carState);
 
-    // Coins
+    // Coins — each coin gives 10 coins
     checkCoins();
 
-    // Driving coin timer
+    // Driving coin timer (1 coin per 25 seconds of driving)
     if (carState.speed > 5) {
       coinTimer += dt;
       if (coinTimer >= COIN_INTERVAL) {
@@ -264,15 +277,18 @@ function gameLoop(dt) {
       if (result) showRaceResults(result);
     }
 
-    // Multiplayer
-    multiplayer.sendUpdate(playerCar.position, playerCar.rotation);
+    // Multiplayer — throttled position sync
+    mpSendTimer += dt;
+    if (mpSendTimer >= MP_SEND_RATE) {
+      mpSendTimer = 0;
+      multiplayer.sendUpdate(playerCar.position, playerCar.rotation);
+    }
     multiplayer.updateMeshes();
 
     // Minimap
     updateMinimap();
 
   } else if (state === 'countdown') {
-    // Camera follows car during countdown
     engine.updateCamera(playerCar.position, playerCar.rotation, 0, {
       mode: 0, lookingBack: false, baseFov: settings.get('fov'),
     });
@@ -302,7 +318,7 @@ function updateHUD(carState) {
   if (driftInd) driftInd.style.opacity = carState.drifting ? '1' : '0';
 }
 
-// ─── Coins ───
+// ─── Coins — each pickup = 10 coins ───
 function checkCoins() {
   world.coins.forEach(coin => {
     if (coin.userData.collected) return;
@@ -311,13 +327,13 @@ function checkCoins() {
     if (dx * dx + dz * dz < 12.25) { // 3.5²
       coin.userData.collected = true;
       coin.visible = false;
-      garage.addCoins(1);
+      garage.addCoins(10); // 10 coins per pickup
       audio.playCoinPickup();
       setTimeout(() => { coin.userData.collected = false; coin.visible = true; }, 45000);
     }
   });
 
-  // Animate coins
+  // Animate coins — spin on Z axis (they're already rotated via group)
   world.coins.forEach(coin => {
     if (!coin.userData.collected) {
       coin.rotation.z += 0.03;
@@ -330,7 +346,7 @@ function checkCoins() {
 function updateMinimap() {
   if (!minimapCtx) return;
   const ctx = minimapCtx;
-  const w = 160, h = 160, scale = 0.09;
+  const w = 160, h = 160, scale = 0.045; // Smaller scale for bigger map
 
   ctx.fillStyle = '#1a2a1a';
   ctx.fillRect(0, 0, w, h);

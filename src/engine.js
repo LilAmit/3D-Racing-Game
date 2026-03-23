@@ -17,7 +17,7 @@ export class GameEngine {
     this.renderer.toneMappingExposure = 1;
 
     this.camera = new THREE.PerspectiveCamera(
-      75, window.innerWidth / window.innerHeight, 0.3, 800
+      75, window.innerWidth / window.innerHeight, 0.3, 1500
     );
 
     // Lerp targets for smooth camera

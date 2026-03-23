@@ -1,4 +1,4 @@
-// Race mode — bots, checkpoints, laps, results
+// Race mode — bots, checkpoints, laps, results, dedicated race tracks
 
 import { TRACKS } from './world.js';
 import { Car } from './car.js';
@@ -14,6 +14,7 @@ class BotCar {
     this.lap = 0;
     this.finished = false;
     this.finishTime = 0;
+    this.name = def.name + ' Bot';
   }
 
   update(dt, colliders, ramps) {
@@ -90,17 +91,25 @@ export class RaceManager {
 
   async startCountdown(scene, world, playerCar, onReady) {
     const track = TRACKS[this.trackId];
+
+    // Build dedicated race track geometry if applicable
+    if (track.dedicated) {
+      world.buildRaceTrack(this.trackId);
+    }
+
     world.addCheckpoints(track);
 
     // Position player at start
     playerCar.reset(track.startPos.x, track.startPos.z, track.startAngle);
 
-    // Create bots
+    // Create bots — pick random cars from the available pool
     this.bots.forEach(b => b.destroy());
     this.bots = [];
 
     for (let i = 0; i < this.botCount; i++) {
-      const def = CAR_DEFS[Math.floor(Math.random() * Math.min(CAR_DEFS.length, 4))];
+      // Bots use cars of varying quality (not the best car every time)
+      const defIdx = Math.min(Math.floor(Math.random() * CAR_DEFS.length), CAR_DEFS.length - 1);
+      const def = CAR_DEFS[defIdx];
       const offset = (i + 1) * 6;
       const side = i % 2 === 0 ? -5 : 5;
       this.bots.push(new BotCar(
@@ -164,7 +173,7 @@ export class RaceManager {
       const finished = bot.checkCheckpoint(this.totalLaps);
       if (finished) {
         bot.finishTime = this.elapsedTime;
-        this.finishOrder.push({ name: bot.car.def.name + ' Bot', time: this.elapsedTime });
+        this.finishOrder.push({ name: bot.name, time: this.elapsedTime });
       }
     });
 
@@ -192,7 +201,7 @@ export class RaceManager {
       }
     }
 
-    // Check if all bots finished
+    // Check if all bots finished (player DNF)
     const allBotsFinished = this.bots.every(b => b.finished);
     if (allBotsFinished && !this.playerFinished) {
       this.playerFinished = true;
@@ -227,13 +236,15 @@ export class RaceManager {
     this.finishOrder.sort((a, b) => a.time - b.time);
     const playerIdx = this.finishOrder.findIndex(f => f.isPlayer);
     const position = playerIdx + 1;
-    const rewards = { 1: 200, 2: 100, 3: 50 };
+
+    // New reward system: 1st = 50 coins, 2nd = 25, 3rd = 15
+    const rewards = { 1: 50, 2: 25, 3: 15 };
 
     return {
       position,
       totalRacers: this.botCount + 1,
       time: this.elapsedTime,
-      coins: rewards[position] || 20,
+      coins: rewards[position] || 5,
       order: this.finishOrder,
     };
   }
@@ -243,6 +254,7 @@ export class RaceManager {
     this.bots.forEach(b => b.destroy());
     this.bots = [];
     world.removeCheckpoints();
+    world.removeRaceTrack();
     document.getElementById('raceHud').classList.add('hidden');
   }
 }
